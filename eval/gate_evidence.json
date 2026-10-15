@@ -1,0 +1,5 @@
+{
+  "0": {
+    "gpu_models": "RTX 3050 A 4 GB; YOLO detected 4 people; SmolVLM captioned image on CUDA; measurements in docs/gpu-smoke.md"
+  }
+}

@@ -1,0 +1,40 @@
+# Live video event summarization system
+
+This repository is being built in phases for a 48-hour hackathon. The current working path is a mock event into SQLite. Run every phase gate before advancing; see [docs/phase-gates.md](docs/phase-gates.md).
+
+## Problem statement 3 - acceptance target
+
+The Honeywell brief asks for a working prototype that processes a **live or simulated video stream**, detects and tracks objects, uses an **open-source vision-language model** to summarize events, classifies them with confidence scores, stores timestamp/camera/category/summary/key frame, and answers natural-language questions about the stored events. All inference must run with open-source models on one consumer GPU or laptop, with no paid cloud API. The submission must include measured accuracy and latency.
+
+The five named categories are examples in the brief; our 48-hour build plan treats them as targets. If a category fails evaluation, we will disclose that result and prioritize a reliable end-to-end prototype, chatbot, and measured report. Features such as semantic search, privacy blur, and incident grouping are additions from the build plan, not requirements of the brief.
+
+## Current smoke test
+
+```powershell
+.\.venv\Scripts\python.exe -m vision.run_pipeline --mock
+.\.venv\Scripts\python.exe -c "from core.db import get_events; print(get_events())"
+.\.venv\Scripts\python.exe -m eval.phase_gate check 0
+```
+
+## Frozen event contract
+
+Each event has exactly these seven fields: `id` (UUID string), `timestamp` (UTC ISO 8601 string), `camera_id` (string), `category` (string), `confidence` (normalized score from 0 to 1), `summary` (string), and `keyframe_path` (string or null). Confidence is a score, not a calibrated probability; different model scores should not be compared without evaluation.
+
+Category values: `person_down`, `fighting`, `tailgating`, `crowd`, `suspicious`. These correspond to person down, fighting, tailgating, crowd incident, and suspicious activity. Teammates should use the code values in database rows and APIs.
+
+The shared API is `Event.create(...)`, `insert_event(event)`, and `get_events()`. The SQLite file is `data/events.db` and is excluded from Git.
+
+## Main laptop vision environment
+
+Create a Python 3.11 virtual environment. Install the CUDA-enabled PyTorch and Torchvision wheels from the [official selector](https://pytorch.org/get-started/locally/) for Windows and your driver, then install `requirements.txt`. The build tested here was PyTorch `2.14.1+cu126` with Torchvision `0.29.1+cu126`; the command used was:
+
+```powershell
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+python -m pip install -r requirements.txt
+```
+
+See [docs/gpu-smoke.md](docs/gpu-smoke.md) for measured results. Model downloads are cached locally and ignored by Git.
+
+## Team handoff
+
+Person A owns vision and final integration on the main Windows laptop. Person B owns the database-backed chatbot and develops on CPU. Person C owns dashboard, evaluation, and report. Each person works on a branch and merges at gate checkpoints. Hand over source and dependency lists, not virtual environments.
