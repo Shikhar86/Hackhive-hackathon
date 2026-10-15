@@ -1,5 +1,8 @@
 {
   "0": {
     "gpu_models": "RTX 3050 A 4 GB; YOLO detected 4 people; SmolVLM captioned image on CUDA; measurements in docs/gpu-smoke.md"
+  },
+  "1": {
+    "chat": "eval.test_chatbot on 200 synthetic events: 20/20 saved questions matched expected rows; DROP, UPDATE, and DELETE all rejected; fixture intact."
   }
 }
