@@ -51,7 +51,21 @@ On 2026-10-16, ran the default person-down and crowd rules on the user-provided 
 | `crowd` alerts | 0 |
 | Phase 3 false-alarm criterion | **Fail**; the requirement is fewer than 3 false alarms |
 
-A threshold-only sweep evaluated 96 combinations of person-down aspect ratio (0.8–1.4), height-drop threshold (0.25–0.55), and consecutive frames (2–5) against this clip and three candidate fall clips (`v001`, `v011`, `v003`). No tested setting both reduced the normal-clip person-down alerts below 3 and detected person-down in at least 2 of those 3 candidate clips. One setting (`aspect=1.2`, `height_drop=0.25`, `frames=5`) produced 1 normal-clip alert but detected only `v011`; it missed `v001` and `v003`. This setting was not retained. Defaults remain unchanged. The sweep is a small, clip-specific experiment, not a general accuracy claim.
+A threshold-only sweep first evaluated 96 combinations of person-down aspect ratio (0.8–1.4), height-drop threshold (0.25–0.55), and consecutive frames (2–5) against this clip and three candidate fall clips (`v001`, `v011`, `v003`). No tested setting both reduced the normal-clip alerts below 3 and detected person-down in at least 2 of those 3 clips. A later sweep, using the two user-confirmed montage falls and the previously labeled office and snow-slip clips, found a setting that meets the 2 FPS checks; details follow below. These results are specific to the available clips, not a general accuracy claim.
+
+## Tuned 2 FPS person-down rule
+
+Set the default person-down thresholds to `aspect=1.2`, `height_drop=0.1`, and `frames=3`. The selected setting was replayed against the saved YOLO + ByteTrack tracks for the 322.1-second normal shop video, the three previously labeled positive clips, and the user-confirmed montage segments. The detector logic, rather than YOLO, was under test in this replay.
+
+| Clip | Result with tuned default |
+|---|---|
+| Normal shop, 322.1 s, reviewed normal | 2 false alerts at 195.5 s and 300.5 s (prior setting: 9) |
+| Office fall demo, 30 s | Alerts at 9.0 s and 17.0 s; one confirmed incident appears across both frames |
+| Snowy doorway slip, 14 s | Alert at 5.0 s |
+| Icy-walk slip, 14 s | No alert |
+| Follow-up montage, 314.5 s | 9 alerts total; alerts in both user-confirmed fall segments at 74.5 s and 119.5 s |
+
+This meets the phase check at the configured 2 FPS: fewer than 3 false alerts on the normal clip and detection in 2 of the 3 labeled positive clips. Both user-confirmed montage falls are also detected. The two remaining shop alerts were visually checked: one is a partial head at the image edge; the other is a standing shopper. The saved real-video tracks were replayed through `vision.run_pipeline` into isolated temporary SQLite databases; this confirmed the event counts and verified that the standard pipeline emits no crowd events. This is still a small, clip-specific evaluation. At 4 FPS, a six-frame persistence window produced 5 shop false alerts while still detecting both confirmed falls; increasing it to 12 observations reduced shop alerts to 2 but missed the second confirmed fall. Keep the documented 2 FPS setting unless the rule is reevaluated on new footage.
 
 ## Mixed-scene follow-up clip
 
@@ -72,13 +86,13 @@ Replayed the cached YOLO + ByteTrack tracks at 2 FPS:
 | `v003_converted 3.avi` | 0 alerts | 0 alerts |
 | Labeled 30-second fall demo | 2 alerts (6.5, 9.0 s) | 1 alert (11.5 s) |
 
-The experiment substantially lowers alerts on this one normal clip and detects a transition in the labeled 30-second demo, but produces one alert there where the current rule produced two. After user confirmation, it is clear that it misses both falls in the montage that the existing rule detects. It also misses the two short clips where people are already down before tracking establishes an upright baseline. It is not a usable replacement and was not enabled by default. The remaining shop alert is at 193.0 s. This does not pass the Phase 3 false-alarm criterion because the default implementation still produces nine reviewed false alerts; Gate 3 remains open. Track continuity, sampling rate, and camera view should still be considered when future rule experiments are evaluated.
+The transition experiment substantially lowers alerts on the shop clip but produces only one event on the labeled 30-second demo, misses both user-confirmed montage falls, and misses the short clips where people are already down before tracking establishes an upright baseline. It is not the selected rule and remains opt-in. Its remaining shop event was at 193.0 s. Track continuity, sampling rate, and camera view should still be considered when future rule experiments are evaluated.
 
 ## Sampling-rate comparison
 
 Re-ran YOLO + ByteTrack on the original normal shop and mixed-scene montage videos at 4 FPS. The run produced 1,289 shop frames and 1,258 montage frames. To keep the persistence duration comparable with the existing 2 FPS, three-frame setting, this comparison uses six consecutive observations at 4 FPS (about 1.25 seconds from first to last observation).
 
-| Clip | Existing rule at 2 FPS, 3 frames | Existing rule at 4 FPS, 6 frames | Transition experiment at 4 FPS, 6 frames |
+| Clip | Earlier rule at 2 FPS, 3 frames | Earlier rule at 4 FPS, 6 frames | Transition experiment at 4 FPS, 6 frames |
 |---|---:|---:|---:|
 | Normal shop | 9 alerts | 10 alerts | 1 alert |
 | Follow-up montage | 16 alerts | 15 alerts | 0 alerts |

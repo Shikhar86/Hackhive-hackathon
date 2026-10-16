@@ -39,13 +39,13 @@ Then open the local Streamlit address, usually `http://localhost:8501`, and chec
 .\.venv\Scripts\python.exe -m eval.phase_gate check 1
 ```
 
-Current limitations: `person_down` uses a bounding-box heuristic and still exceeds the false-alarm target on the normal shop clip. SmolVLM captions the event keyframe but does not independently validate the category. See `eval/gate_evidence.json` for the measured phase results.
+Current limitations: `person_down` uses a bounding-box heuristic; it misses the icy-walk slip and its tuning was evaluated at 2 FPS on the available clips. At 4 FPS the false-alert count rises, so do not change the sample rate without reevaluating. SmolVLM captions the event keyframe but does not independently validate the category. See `eval/gate_evidence.json` for the measured phase results.
 
 ### Phase 3 category scope
 
-For this build and demo, `person_down` is the only kept category. Its existing labeled-clip check detected events in 2 of 3 positive clips; the missed icy-walk clip and the shop false alarms remain documented failures. The following categories are cut from the current detector and demo:
+For this build and demo, `person_down` is the only kept category. Its labeled-clip check detects events in 2 of 3 positive clips, and the tuned 2 FPS rule produces 2 false alerts on the reviewed normal shop clip. The missed icy-walk clip remains documented. The following categories are cut from the standard detector/demo:
 
-- `crowd`: the current eight-person count rule also flags an ordinary queue (`v006`), so it does not establish a harmful crowd incident.
+- `crowd`: cut from the standard detector/demo because the eight-person count rule also flags an ordinary queue (`v006`), so it does not establish a harmful crowd incident. The count-only experiment can be re-enabled with `--crowd-threshold 8` but is not presented as incident detection.
 - `fighting`: no fighting classifier is implemented; the altercation examples (`v001`, `v003`, `v011`, and `w001`) are not detected as fighting events.
 - `tailgating`: no classifier or labeled test clips are available.
 - `suspicious`: no classifier or agreed labeled test set is available; a general-purpose label would be too vague to evaluate reliably.

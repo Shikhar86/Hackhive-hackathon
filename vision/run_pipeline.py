@@ -70,10 +70,10 @@ def run_pipeline(
     confidence: float = 0.25,
     device: str | None = None,
     max_frames: int | None = None,
-    person_down_aspect: float = 1.0,
-    person_down_height_drop: float = 0.55,
+    person_down_aspect: float = 1.2,
+    person_down_height_drop: float = 0.1,
     person_down_frames: int = 3,
-    crowd_threshold: int = 8,
+    crowd_threshold: int | None = None,
     use_vlm: bool = True,
     db_path=None,
 ) -> list[Event]:
@@ -142,9 +142,13 @@ def main() -> None:
     parser.add_argument("--confidence", type=float, default=0.25)
     parser.add_argument("--device", default=None, help="Ultralytics device, e.g. 0 or cpu")
     parser.add_argument("--max-frames", type=int, help="Stop after this many sampled frames")
-    parser.add_argument("--person-down-aspect", type=float, default=1.0)
+    parser.add_argument("--person-down-aspect", type=float, default=1.2)
+    parser.add_argument("--person-down-height-drop", type=float, default=0.1)
     parser.add_argument("--person-down-frames", type=int, default=3)
-    parser.add_argument("--crowd-threshold", type=int, default=8)
+    parser.add_argument(
+        "--crowd-threshold", type=int, default=None,
+        help="Enable the experimental count-only crowd rule at this people count (disabled by default)",
+    )
     parser.add_argument("--no-vlm", action="store_true", help="Use heuristic summaries without loading SmolVLM")
     args = parser.parse_args()
 
@@ -166,6 +170,7 @@ def main() -> None:
         device=args.device,
         max_frames=args.max_frames,
         person_down_aspect=args.person_down_aspect,
+        person_down_height_drop=args.person_down_height_drop,
         person_down_frames=args.person_down_frames,
         crowd_threshold=args.crowd_threshold,
         use_vlm=not args.no_vlm,

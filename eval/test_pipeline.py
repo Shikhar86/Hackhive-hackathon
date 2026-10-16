@@ -72,7 +72,7 @@ def main():
             patch("vision.run_pipeline.save_keyframe", return_value="data/keyframes/test.jpg"),
             patch("vision.run_pipeline.summarize_image", return_value="test factual caption"),
         ):
-            events = run_pipeline("unused-source", db_path=db_path)
+            events = run_pipeline("unused-source", db_path=db_path, crowd_threshold=8)
 
         rows = get_events(db_path)
         assert len(events) == 2, f"Expected one crowd and one person-down event, got {len(events)}"

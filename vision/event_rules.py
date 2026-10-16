@@ -42,24 +42,25 @@ class EventDetector:
     person_down_aspect : float
         Width / height ratio above which a bounding box is considered
         "lying down".  A standing person typically has aspect < 0.6;
-        a person lying flat > 1.0.  Default 1.0.
+        a person lying flat > 1.0.  Tuned default 1.2.
     person_down_height_drop : float
         Fraction of the maximum observed height below which the current
-        height counts as "collapsed".  Default 0.55 (height dropped to
-        55 % of maximum).
+        height counts as "collapsed". Tuned default 0.1 (height dropped to
+        10 % of maximum).
     person_down_frames : int
         Number of consecutive qualifying frames before the rule fires.
-    crowd_threshold : int
+    crowd_threshold : int | None
         Minimum number of simultaneously visible people to trigger a
-        crowd event.
+        crowd event. None disables this experimental count-only rule; this
+        is the default because it does not distinguish incidents from queues.
     """
 
     def __init__(
         self,
-        person_down_aspect: float = 1.0,
-        person_down_height_drop: float = 0.55,
+        person_down_aspect: float = 1.2,
+        person_down_height_drop: float = 0.1,
         person_down_frames: int = 3,
-        crowd_threshold: int = 8,
+        crowd_threshold: int | None = None,
         person_down_requires_transition: bool = False,
     ):
         # Per-track history: track_id -> list of observation dicts
@@ -73,6 +74,8 @@ class EventDetector:
         self.person_down_aspect = person_down_aspect
         self.person_down_height_drop = person_down_height_drop
         self.person_down_frames = person_down_frames
+        if crowd_threshold is not None and crowd_threshold < 1:
+            raise ValueError("crowd_threshold must be positive or None")
         self.crowd_threshold = crowd_threshold
         # Experimental opt-in: require an observed upright-to-low transition.
         # The default keeps the shipped detector behavior unchanged.
@@ -164,7 +167,10 @@ class EventDetector:
         # --- crowd rule -----------------------------------------------------
         # Emit one crowd event per camera per detector run. Using the frame
         # number here would create a duplicate event on every sampled frame.
-        is_crowd = len(person_tracks) >= self.crowd_threshold
+        is_crowd = (
+            self.crowd_threshold is not None
+            and len(person_tracks) >= self.crowd_threshold
+        )
         if is_crowd and frame.camera_id not in self._crowd_active:
             self._crowd_active.add(frame.camera_id)
             avg_conf = sum(t["confidence"] for t in person_tracks) / len(person_tracks)
