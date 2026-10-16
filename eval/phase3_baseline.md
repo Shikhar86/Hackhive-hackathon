@@ -72,3 +72,14 @@ Replayed the cached YOLO + ByteTrack tracks at 2 FPS:
 | Labeled 30-second fall demo | 2 alerts (6.5, 9.0 s) | 1 alert (11.5 s) |
 
 The experiment substantially lowers alerts on this one normal clip and detects a transition in the labeled 30-second demo, but produces one alert there where the current rule produced two. It misses the tentative montage falls and the two short clips where people are already down before tracking establishes an upright baseline. It is not a usable replacement and was not enabled by default. The remaining shop alert is at 193.0 s. This does not pass the Phase 3 false-alarm criterion because the default implementation still produces nine reviewed false alerts; Gate 3 remains open. Track continuity, sampling rate, camera view, and confirmed segment labels need to be improved before this motion rule can be judged fairly.
+
+## Sampling-rate comparison
+
+Re-ran YOLO + ByteTrack on the original normal shop and mixed-scene montage videos at 4 FPS. The run produced 1,289 shop frames and 1,258 montage frames. To keep the persistence duration comparable with the existing 2 FPS, three-frame setting, this comparison uses six consecutive observations at 4 FPS (about 1.25 seconds from first to last observation).
+
+| Clip | Existing rule at 2 FPS, 3 frames | Existing rule at 4 FPS, 6 frames | Transition experiment at 4 FPS, 6 frames |
+|---|---:|---:|---:|
+| Normal shop | 9 alerts | 10 alerts | 1 alert |
+| Follow-up montage | 16 alerts | 15 alerts | 0 alerts |
+
+The existing rule still flags the tentative montage intervals around 75 s and 119.5 s at 4 FPS, but those labels remain unconfirmed. The rate increase did not reduce normal-shop false alerts. The transition experiment continues to suppress these montage alerts along with other candidates, so it is not a replacement. The default sample rate and rule were left unchanged. The additional tracks are local evaluation outputs and are not committed.
