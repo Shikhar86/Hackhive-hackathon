@@ -38,6 +38,10 @@ def open_source(source: str) -> tuple[cv2.VideoCapture, bool]:
     if not capture.isOpened():
         capture.release()
         raise RuntimeError(f"Could not open video source: {source}")
+    if is_file and hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"):
+        # Phone recordings may keep encoded frames sideways and describe the
+        # intended portrait orientation only in container metadata.
+        capture.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
     return capture, is_file
 
 

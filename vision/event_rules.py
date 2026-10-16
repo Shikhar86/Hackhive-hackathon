@@ -52,6 +52,9 @@ class EventDetector:
         10 % of maximum).
     person_down_frames : int
         Number of consecutive qualifying frames before the rule fires.
+    person_down_motion_ratio : float | None
+        Optional sensitive mode: also require a wider box to shrink below this
+        fraction of the same track's tallest observed box. Disabled by default.
     crowd_threshold : int | None
         Minimum number of simultaneously visible people to trigger a
         crowd event. None disables this experimental count-only rule; this
@@ -65,6 +68,7 @@ class EventDetector:
         person_down_frames: int = 3,
         crowd_threshold: int | None = None,
         person_down_requires_transition: bool = False,
+        person_down_motion_ratio: float | None = None,
     ):
         # Per-track history: track_id -> list of observation dicts
         self._history: dict[int, list[dict]] = defaultdict(list)
@@ -77,6 +81,9 @@ class EventDetector:
         self.person_down_aspect = person_down_aspect
         self.person_down_height_drop = person_down_height_drop
         self.person_down_frames = person_down_frames
+        if person_down_motion_ratio is not None and not 0 < person_down_motion_ratio < 1:
+            raise ValueError("person_down_motion_ratio must be between 0 and 1")
+        self.person_down_motion_ratio = person_down_motion_ratio
         if crowd_threshold is not None and crowd_threshold < 1:
             raise ValueError("crowd_threshold must be positive or None")
         self.crowd_threshold = crowd_threshold
@@ -148,7 +155,17 @@ class EventDetector:
                 for obs in recent:
                     aspect = obs["w"] / obs["h"] if obs["h"] > 0 else 0
                     height_ratio = obs["h"] / max_h if max_h > 0 else 1
-                    if aspect > self.person_down_aspect or height_ratio < self.person_down_height_drop:
+                    if self.person_down_motion_ratio is not None:
+                        matches = (
+                            aspect > self.person_down_aspect
+                            and height_ratio < self.person_down_motion_ratio
+                        )
+                    else:
+                        matches = (
+                            aspect > self.person_down_aspect
+                            or height_ratio < self.person_down_height_drop
+                        )
+                    if matches:
                         qualifying += 1
 
             if qualifying >= self.person_down_frames:
@@ -161,6 +178,15 @@ class EventDetector:
                         f"Track {tid} changed from an observed upright posture to a wide, lower posture "
                         f"for {qualifying} sampled frames. Last box width/height: {aspect:.2f}; "
                         f"threshold: {self.person_down_aspect:.2f}."
+                    )
+                elif self.person_down_motion_ratio is not None:
+                    reason = (
+                        f"Track {tid} became wider and lower for {qualifying} consecutive sampled "
+                        f"frames. Last box width/height: {aspect:.2f} "
+                        f"(threshold {self.person_down_aspect:.2f}); height: {height_ratio:.0%} "
+                        f"of its tallest observed box (must be below "
+                        f"{self.person_down_motion_ratio:.0%}). This is a possible low posture, "
+                        "not proof of a fall."
                     )
                 else:
                     reason = (
@@ -175,16 +201,24 @@ class EventDetector:
                     if obs["x_pct"] is not None and obs["y_pct"] is not None
                 ]
                 self._fired.add(key)
-                events.append(DetectedEvent(
-                    camera_id=frame.camera_id,
-                    category="person_down",
-                    confidence=round(min(avg_conf, 1.0), 4),
-                    summary=(
+                if self.person_down_motion_ratio is not None and not self.person_down_requires_transition:
+                    summary = (
+                        f"Person (track {tid}) entered a possible low posture for "
+                        f"{self.person_down_frames} sampled frames at {frame.video_time_s:.1f}s; "
+                        "review the video to decide whether this was a fall"
+                    )
+                else:
+                    summary = (
                         f"Person (track {tid}) appears to be on the ground — "
                         f"aspect ratio or height-drop threshold exceeded for "
                         f"{self.person_down_frames} consecutive frames at "
                         f"{frame.video_time_s:.1f}s"
-                    ),
+                    )
+                events.append(DetectedEvent(
+                    camera_id=frame.camera_id,
+                    category="person_down",
+                    confidence=round(min(avg_conf, 1.0), 4),
+                    summary=summary,
                     frame_index=frame.frame_index,
                     video_time_s=frame.video_time_s,
                     captured_at_utc=frame.captured_at_utc,

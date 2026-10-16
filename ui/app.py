@@ -89,11 +89,17 @@ st.markdown(
     }
     .ui-hero-status b { color: #70d6a1; margin-right: .4rem; }
     .ui-steps { display: flex; flex-wrap: wrap; gap: .55rem; margin: 0 0 1.15rem; }
-    .ui-steps span {
+    .ui-steps a {
+        display: inline-block; text-decoration: none;
         border: 1px solid #695367; border-radius: 999px; background: #161219;
         padding: .5rem .9rem; color: #ddcbd9; font-size: .8rem;
     }
-    .ui-steps span:first-child { background: linear-gradient(110deg, #694964, #402d43); color: #fff; }
+    .ui-steps a:hover, .ui-steps a:focus {
+        border-color: #d4a2ca; background: #2b202d; color: #fff;
+        box-shadow: 0 0 0 2px rgba(212, 162, 202, .15);
+    }
+    .ui-steps a:first-child { background: linear-gradient(110deg, #694964, #402d43); color: #fff; }
+    .ui-anchor { scroll-margin-top: 1rem; }
     .ui-metric {
         min-height: 118px; padding: 1.25rem 1.4rem; border-radius: 22px;
         background: linear-gradient(135deg, #1c1720, #0e0c11);
@@ -175,7 +181,11 @@ st.markdown(
       </div>
       <div class="ui-hero-status"><b>●</b> ON-DEVICE PROTOTYPE</div>
     </div>
-    <div class="ui-steps"><span>01 &nbsp; Analyze video</span><span>02 &nbsp; Review events</span><span>03 &nbsp; Ask the assistant</span></div>
+    <nav class="ui-steps" aria-label="Dashboard sections">
+      <a href="#video-analysis">01 &nbsp; Analyze video</a>
+      <a href="#review-events">02 &nbsp; Review events</a>
+      <a href="#ask-assistant">03 &nbsp; Ask the assistant</a>
+    </nav>
     """,
     unsafe_allow_html=True,
 )
@@ -211,19 +221,34 @@ def save_upload(uploaded_file) -> Path:
     return path
 
 
-def browser_preview(source_path: Path) -> Path:
-    """Make a widely playable H.264 Baseline preview with its audio."""
-    preview_path = source_path.with_name(f"{source_path.stem}_preview.mp4")
+VIDEO_ROTATIONS = {
+    "As shown": None,
+    "Turn left 90°": "transpose=2",
+    "Turn right 90°": "transpose=1",
+    "Turn upside down": "hflip,vflip",
+}
+
+
+def browser_preview(source_path: Path, rotation: str = "As shown") -> Path:
+    """Make a browser-compatible copy in the operator-selected orientation."""
+    if rotation not in VIDEO_ROTATIONS:
+        raise ValueError(f"Unknown video orientation: {rotation}")
+    suffix = "preview" if rotation == "As shown" else f"{list(VIDEO_ROTATIONS).index(rotation)}_preview"
+    preview_path = source_path.with_name(f"{source_path.stem}_{suffix}.mp4")
     if preview_path.is_file() and preview_path.stat().st_size:
         return preview_path
     temporary_path = preview_path.with_name(f"{preview_path.stem}-{uuid4().hex}.mp4")
     command = [
         imageio_ffmpeg.get_ffmpeg_exe(), "-nostdin", "-hide_banner", "-loglevel", "error",
         "-y", "-i", str(source_path), "-map", "0:v:0", "-map", "0:a?",
+    ]
+    if VIDEO_ROTATIONS[rotation]:
+        command.extend(["-vf", VIDEO_ROTATIONS[rotation]])
+    command.extend([
         "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", "yuv420p",
         "-preset", "veryfast", "-crf", "25", "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart", str(temporary_path),
-    ]
+    ])
     try:
         subprocess.run(command, check=True, capture_output=True, text=True, timeout=300)
         temporary_path.replace(preview_path)
@@ -258,6 +283,18 @@ def display_time(timestamp: str) -> str:
         return datetime.fromisoformat(timestamp).astimezone().strftime("%d %b %Y · %I:%M %p")
     except ValueError:
         return timestamp
+
+
+def display_video_time(seconds: float | None) -> str:
+    """Format an event's exact position inside its source video."""
+    if seconds is None:
+        return "Unavailable"
+    total_seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 
 def video_frame_at(source_path: Path, seconds: float):
@@ -302,13 +339,28 @@ def track_diagram(points: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 # Local video upload and processing
 # ---------------------------------------------------------------------------
+st.markdown('<div id="video-analysis" class="ui-anchor"></div>', unsafe_allow_html=True)
 st.header("Video analysis")
 video_controls, video_preview = st.columns([1, 1.18], gap="large")
 with video_controls:
-    st.caption("Upload a clip and give this analysis a unique camera name.")
-    uploaded_video = st.file_uploader("Choose a video", type=["mp4", "avi", "mov"])
+    st.caption("Upload a clip from this computer or phone and give the analysis a unique camera name.")
+    uploaded_video = st.file_uploader(
+        "Choose a video from this device",
+        type=["mp4", "mov", "m4v", "avi", "webm", "3gp"],
+        help="Phone videos up to 1 GB are accepted. Keep this page open while the file transfers to the laptop.",
+    )
     source_path = save_upload(uploaded_video) if uploaded_video is not None else None
     clip_duration = video_duration(source_path) if source_path else None
+    rotation = st.selectbox(
+        "Video orientation",
+        list(VIDEO_ROTATIONS),
+        help="If people look sideways or upside down in the preview, turn the video until they are upright before analysis.",
+    )
+    detection_mode = st.selectbox(
+        "Person-down detection",
+        ["Standard", "Motion-sensitive (experimental)"],
+        help="Motion-sensitive mode can catch shorter low-posture moments, but may create more false alerts. Review each result.",
+    )
 
     if "camera_name" not in st.session_state:
         st.session_state["camera_name"] = suggest_camera_name()
@@ -326,9 +378,9 @@ with video_preview:
     if source_path:
         with st.spinner("Preparing a browser-compatible preview..."):
             try:
-                preview_path = browser_preview(source_path)
+                preview_path = browser_preview(source_path, rotation)
             except (OSError, subprocess.SubprocessError) as exc:
-                st.warning(f"Preview unavailable: {type(exc).__name__}. The original video can still be analyzed.")
+                st.warning(f"Preview unavailable: {type(exc).__name__}. Re-select the file or try a shorter clip before analysis.")
             else:
                 st.video(str(preview_path))
     else:
@@ -359,8 +411,13 @@ if analyze_clicked:
 
     with st.spinner("Detecting and tracking people, then describing event keyframes..."):
         try:
+            # Use the same operator-checked orientation for playback and AI.
+            analysis_source = browser_preview(source_path, rotation)
             created = run_pipeline(
-                str(source_path), camera_id=camera_id.strip(), on_frame=show_sampled_frame,
+                str(analysis_source), camera_id=camera_id.strip(), on_frame=show_sampled_frame,
+                person_down_aspect=1.05 if detection_mode.startswith("Motion-sensitive") else 1.2,
+                person_down_frames=2 if detection_mode.startswith("Motion-sensitive") else 3,
+                person_down_motion_ratio=0.75 if detection_mode.startswith("Motion-sensitive") else None,
             )
         except Exception as exc:
             progress_slot.empty()
@@ -382,7 +439,7 @@ if analyze_clicked:
             else:
                 st.info("Analysis complete. No person-down event was detected in this video.")
 
-st.caption("Videos are processed on this laptop at 2 sampled frames per second. The original and its playback copy stay in the local data/videos folder.")
+st.caption("Check that people are upright in the preview before analysis. Videos are processed on this laptop at 2 sampled frames per second. The original and its playback copy stay in the local data/videos folder.")
 
 latest_run = st.session_state.get("latest_run")
 if latest_run:
@@ -518,6 +575,7 @@ def render_event_feed():
                     col.warning(f"Missing: {event['keyframe_path']}")
 
 
+st.markdown('<div id="review-events" class="ui-anchor"></div>', unsafe_allow_html=True)
 render_event_feed()
 
 selected_event_id = st.session_state.get("selected_event_id")
@@ -526,9 +584,11 @@ if selected_event:
     evidence = get_event_evidence(selected_event_id)
     review = get_review(selected_event_id)
     st.header("Incident review")
-    st.caption(
-        f"{display_time(selected_event['timestamp'])} · {selected_event['camera_id']} · "
-        f"{review['status']}"
+    video_position = display_video_time(evidence["video_time_s"] if evidence else None)
+    st.info(
+        f"**Video timestamp: {video_position}**  \n"
+        f"Saved at {display_time(selected_event['timestamp'])} · "
+        f"Camera {selected_event['camera_id']} · {review['status']}"
     )
     keyframe_column, description_column = st.columns([1, 1.15], gap="large")
     with keyframe_column:
@@ -611,6 +671,7 @@ if selected_event:
 # ---------------------------------------------------------------------------
 # Chatbot
 # ---------------------------------------------------------------------------
+st.markdown('<div id="ask-assistant" class="ui-anchor"></div>', unsafe_allow_html=True)
 st.header("💬 Event Chatbot")
 semantic_search = st.checkbox(
     "Semantic search (local Ollama)", value=False,

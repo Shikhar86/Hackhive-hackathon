@@ -85,7 +85,23 @@ def main():
     for index in range(5):
         assert detector.process_frame(frame(index, [already_down])) == []
 
-    print("PASS: crowd alerts are opt-in and deduplicate/re-arm; tuned person-down default and transition mode behave as expected")
+    # Optional motion-sensitive mode requires both a wider box and an
+    # observed height reduction. A persistently wide but unchanged box alone
+    # must not become a new alert.
+    detector = EventDetector(
+        person_down_aspect=1.05, person_down_frames=2,
+        person_down_motion_ratio=0.75,
+    )
+    assert detector.process_frame(frame(0, [person(10, 0, 0, 40, 100)])) == []
+    assert detector.process_frame(frame(1, [person(10, 0, 0, 120, 100)])) == []
+    assert detector.process_frame(frame(2, [person(10, 0, 0, 120, 100)])) == []
+    assert detector.process_frame(frame(3, [person(10, 0, 50, 60, 100)])) == []
+    events = detector.process_frame(frame(4, [person(10, 0, 50, 60, 100)]))
+    assert len(events) == 1 and events[0].category == "person_down"
+    assert "possible low posture" in events[0].rule_reason
+    assert detector.process_frame(frame(5, [person(10, 0, 50, 60, 100)])) == []
+
+    print("PASS: crowd, tuned person-down default, transition mode, and optional motion-sensitive mode behave as expected")
 
 
 if __name__ == "__main__":
