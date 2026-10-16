@@ -43,6 +43,8 @@ Run `python -m eval.phase_gate check 2` for the automated mocked-VLM-to-database
 
 Add categories one at a time. For each kept category, use three labeled clips and require two triggers. Run a normal five-minute clip and require fewer than three false alarms. Run two camera sources and prove a camera-filtered query. Use 25 prewritten chatbot questions against real events and require 20 correct. Run continuously for 10 minutes without a crash. Mark unsupported categories `cut` in README, with the reason and tested clips.
 
+The supplied reference-clip baseline and blank label worksheet are in `eval/phase3_baseline.md` and `eval/phase3_clip_labels.csv`. Freeze the expected labels before tuning. After processing real clips into the shared event database, run `python -m eval.test_real_chatbot` to score the saved 25-question set; this copies the captured rows into a temporary database and does not alter `data/events.db`.
+
 ## Gate 4 - optional novelty, hours 32-38
 
 Start only after gate 3. For each feature kept, test its config switch both on and off. Measure the fraction of sampled frames sent to the VLM on a five-minute clip. Prove one semantic query succeeds beyond keyword matching. Run all kept features for 10 minutes and confirm replay stays at or above real-time speed. Cut a feature that fails by hour 38.

@@ -1,0 +1,26 @@
+question,expected_category,expected_camera,min_confidence,limit
+Show person down events,person_down,,,100
+Show crowd events,crowd,,,100
+Show events from camera v001,,v001,,100
+Show events from camera v006,,v006,,100
+Show events from camera v011,,v011,,100
+Show events from camera phase2-demo,,phase2-demo,,100
+Show events from camera phase2-refresh,,phase2-refresh,,100
+Show person down events from camera v001,person_down,v001,,100
+Show crowd events from camera v001,crowd,v001,,100
+Show crowd events from camera v006,crowd,v006,,100
+Show person down events from camera v011,person_down,v011,,100
+Show the last 2 person down events from camera phase2-demo,person_down,phase2-demo,,2
+Show the latest 1 event from camera phase2-refresh,,phase2-refresh,,1
+Show events above 90% confidence,,,0.9,100
+Show person down events above 90%,person_down,,0.9,100
+Show person down events above 80%,person_down,,0.8,100
+Show crowd events above 55%,crowd,,0.55,100
+Show events above 50%,,,0.5,100
+Show the last 3 person down events,person_down,,,3
+Show the latest 5 events,,,,5
+Show crowd events above 54% confidence,crowd,,0.54,100
+Show person down events from camera v001 above 50%,person_down,v001,0.5,100
+Show events from camera phase2-refresh above 90% confidence,,phase2-refresh,0.9,100
+Show top 2 events from camera v001,,v001,,2
+Show the last 4 person down events from camera phase2-demo above 80%,person_down,phase2-demo,0.8,4

@@ -18,8 +18,17 @@ CATEGORY_ALIASES = {
 def _filters(question: str):
     text = question.strip().lower()
     category = next((value for value, aliases in CATEGORY_ALIASES.items() if any(alias in text for alias in aliases)), None)
-    camera_match = re.search(r"\bcamera\s*[-#]?\s*([a-z0-9]+)\b", text)
-    camera_id = f"camera-{camera_match.group(1)}" if camera_match else None
+    camera_match = re.search(
+        r"\bcamera(?:\s+(?:id|number|feed))?\s*([-#]?)\s*([a-z0-9]+(?:-[a-z0-9]+)*)\b",
+        text,
+    )
+    camera_id = None
+    if camera_match:
+        separator, identifier = camera_match.groups()
+        if identifier.isdigit() or separator == "-":
+            camera_id = f"camera-{identifier}"
+        else:
+            camera_id = identifier
     confidence_match = re.search(r"(?:above|over|at least|minimum|min confidence|confidence of)?\s*(\d+(?:\.\d+)?)\s*%", text)
     min_confidence = float(confidence_match.group(1)) / 100 if confidence_match else None
     limit_match = re.search(r"\b(?:last|latest|top)\s+(\d+)\b", text)

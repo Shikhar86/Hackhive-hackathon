@@ -12,5 +12,9 @@
     "event": "Ran vision.run_pipeline on the labeled 30-second fall clip at 2 FPS on the main RTX 3050 laptop. It finished in under clip duration, wrote two person_down events to data/events.db, saved both JPEG keyframes, and generated SmolVLM captions from those frames; keyframes reviewed for event match.",
     "chat": "chatbot.chat.ask('Show person down events') returned all 5 stored events, including both phase2-demo and both phase2-refresh real-video events; each new event has a saved keyframe path (2026-10-16).",
     "dashboard": "With Auto-refresh (5 s) checked in the existing localhost:8501 dashboard, ran the labeled clip for camera phase2-refresh; the page changed from 3 to 5 events and displayed both new person_down rows and keyframes without a manual reload (2026-10-16)."
+  },
+  "3": {
+    "cameras": "Replayed two supplied AVI sources sequentially through the video pipeline as camera IDs v006 and v001. After fixing camera-ID parsing, ask('Show events from camera v006') returned only its one crowd event, and ask('Show events from camera v001') returned only its two events. eval.test_chatbot now has regression coverage for nonstandard camera IDs. This verifies simulated-source filtering, not simultaneous multi-camera load (2026-10-16).",
+    "chat": "eval.test_real_chatbot scored the fixed eval/phase3_real_chat_questions.csv against captured video-event rows, excluding the old mock; 25/25 question results matched expected category/camera/confidence/limit filters. The test works on a temporary DB copy and leaves the shared event DB unchanged (2026-10-16)."
   }
 }
