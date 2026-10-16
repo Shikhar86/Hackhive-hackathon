@@ -15,6 +15,7 @@
   },
   "3": {
     "cameras": "Replayed two supplied AVI sources sequentially through the video pipeline as camera IDs v006 and v001. After fixing camera-ID parsing, ask('Show events from camera v006') returned only its one crowd event, and ask('Show events from camera v001') returned only its two events. eval.test_chatbot now has regression coverage for nonstandard camera IDs. This verifies simulated-source filtering, not simultaneous multi-camera load (2026-10-16).",
-    "chat": "eval.test_real_chatbot scored the fixed eval/phase3_real_chat_questions.csv against captured video-event rows, excluding the old mock; 25/25 question results matched expected category/camera/confidence/limit filters. The test works on a temporary DB copy and leaves the shared event DB unchanged (2026-10-16)."
+    "chat": "eval.test_real_chatbot scored the fixed eval/phase3_real_chat_questions.csv against captured video-event rows, excluding the old mock; 25/25 question results matched expected category/camera/confidence/limit filters. The test works on a temporary DB copy and leaves the shared event DB unchanged (2026-10-16).",
+    "stability": "Completed 600-second local replay of the same 30-second fall clip at 640x360 and 2 FPS with YOLO + ByteTrack, --no-vlm: pipeline exited 0 and processed through 590s without crashing, creating 21 events. Replay is a repeated scene (not varied/live footage), and processing ran faster than real time; not evidence for false-alarm performance, real-time throughput, or all-features stability (2026-10-16)."
   }
 }
