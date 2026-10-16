@@ -28,6 +28,7 @@ from core.db import (
     init_db, set_review,
 )
 from vision.run_pipeline import run_pipeline
+from vision.orientation import suggest_video_orientation
 
 init_db()
 
@@ -229,18 +230,28 @@ VIDEO_ROTATIONS = {
 }
 
 
+@st.cache_data(show_spinner=False)
+def cached_orientation_hint(source: str) -> str:
+    """Reuse the local orientation check across dashboard reruns."""
+    return suggest_video_orientation(source)
+
+
 def browser_preview(source_path: Path, rotation: str = "As shown") -> Path:
     """Make a browser-compatible copy in the operator-selected orientation."""
     if rotation not in VIDEO_ROTATIONS:
         raise ValueError(f"Unknown video orientation: {rotation}")
-    suffix = "preview" if rotation == "As shown" else f"{list(VIDEO_ROTATIONS).index(rotation)}_preview"
+    suffix = "preview" if rotation == "As shown" else f"v2_{list(VIDEO_ROTATIONS).index(rotation)}_preview"
     preview_path = source_path.with_name(f"{source_path.stem}_{suffix}.mp4")
     if preview_path.is_file() and preview_path.stat().st_size:
         return preview_path
+    # Normalize container rotation metadata first, then rotate the same
+    # browser copy used for playback. Directly transposing the source can
+    # produce different encoded frames and miss short tracked postures.
+    input_path = source_path if rotation == "As shown" else browser_preview(source_path, "As shown")
     temporary_path = preview_path.with_name(f"{preview_path.stem}-{uuid4().hex}.mp4")
     command = [
         imageio_ffmpeg.get_ffmpeg_exe(), "-nostdin", "-hide_banner", "-loglevel", "error",
-        "-y", "-i", str(source_path), "-map", "0:v:0", "-map", "0:a?",
+        "-y", "-i", str(input_path), "-map", "0:v:0", "-map", "0:a?",
     ]
     if VIDEO_ROTATIONS[rotation]:
         command.extend(["-vf", VIDEO_ROTATIONS[rotation]])
@@ -351,15 +362,28 @@ with video_controls:
     )
     source_path = save_upload(uploaded_video) if uploaded_video is not None else None
     clip_duration = video_duration(source_path) if source_path else None
+    orientation_hint = "As shown"
+    if source_path:
+        with st.spinner("Checking which way people appear upright..."):
+            try:
+                orientation_hint = cached_orientation_hint(str(source_path))
+            except Exception as exc:
+                st.caption(f"Automatic orientation check unavailable ({type(exc).__name__}); inspect the preview manually.")
+    file_key = source_path.stem if source_path else "no-video"
     rotation = st.selectbox(
         "Video orientation",
         list(VIDEO_ROTATIONS),
+        index=list(VIDEO_ROTATIONS).index(orientation_hint),
+        key=f"video_orientation_{file_key}",
         help="If people look sideways or upside down in the preview, turn the video until they are upright before analysis.",
     )
+    if source_path:
+        st.caption(f"Suggested orientation: {orientation_hint}. Confirm people look upright in the preview.")
     detection_mode = st.selectbox(
         "Person-down detection",
-        ["Standard", "Motion-sensitive (experimental)"],
-        help="Motion-sensitive mode also proposes sustained low postures in the visible floor area. It can create false alerts; review every result.",
+        ["Automatic (review fallback)", "Standard", "Motion-sensitive (experimental)"],
+        key=f"detection_mode_{file_key}",
+        help="Automatic first uses the evaluated standard rule. If it finds nothing, it checks experimental low-posture review candidates. Review every alert.",
     )
 
     if "camera_name" not in st.session_state:
@@ -368,6 +392,11 @@ with video_controls:
         st.session_state["camera_name"] = suggest_camera_name()
     camera_id = st.text_input("Camera name for this run", key="camera_name")
     st.caption("A new name keeps this run separate from earlier results.")
+    run_signature = ("orientation-v2", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
+    previous_run = st.session_state.get("latest_run")
+    if previous_run and previous_run.get("run_signature") != run_signature:
+        st.session_state.pop("latest_run", None)
+        st.caption("Video or analysis settings changed. Run analysis to see new results.")
     analyze_clicked = st.button(
         "Analyze video", type="primary", use_container_width=True,
         disabled=source_path is None or not camera_id.strip(),
@@ -413,13 +442,23 @@ if analyze_clicked:
         try:
             # Use the same operator-checked orientation for playback and AI.
             analysis_source = browser_preview(source_path, rotation)
-            created = run_pipeline(
-                str(analysis_source), camera_id=camera_id.strip(), on_frame=show_sampled_frame,
-                person_down_aspect=1.05 if detection_mode.startswith("Motion-sensitive") else 1.2,
-                person_down_frames=2 if detection_mode.startswith("Motion-sensitive") else 3,
-                person_down_motion_ratio=0.75 if detection_mode.startswith("Motion-sensitive") else None,
-                person_down_floor_review=detection_mode.startswith("Motion-sensitive"),
-            )
+            def analyze_once(sensitive: bool):
+                return run_pipeline(
+                    str(analysis_source), camera_id=camera_id.strip(), on_frame=show_sampled_frame,
+                    person_down_aspect=1.05 if sensitive else 1.2,
+                    person_down_frames=2 if sensitive else 3,
+                    person_down_motion_ratio=0.75 if sensitive else None,
+                    person_down_floor_review=sensitive,
+                )
+
+            sensitive = detection_mode.startswith("Motion-sensitive")
+            created = analyze_once(sensitive)
+            mode_used = detection_mode if sensitive else "Standard"
+            if not created and detection_mode.startswith("Automatic"):
+                progress_slot.progress(0, text="Checking experimental low-posture review candidates...")
+                frame_count[0] = 0
+                created = analyze_once(True)
+                mode_used = "Motion-sensitive (automatic review fallback)"
         except Exception as exc:
             progress_slot.empty()
             st.error(f"Video analysis failed: {type(exc).__name__}: {exc}")
@@ -429,7 +468,8 @@ if analyze_clicked:
                 "camera_id": camera_id.strip(),
                 "video_name": uploaded_video.name,
                 "rotation": rotation,
-                "detection_mode": detection_mode,
+                "detection_mode": mode_used,
+                "run_signature": run_signature,
                 "events": [event.to_dict() for event in created],
             }
             if created:
@@ -442,7 +482,7 @@ if analyze_clicked:
             else:
                 st.info(
                     f"Analysis complete with **{rotation}** orientation and "
-                    f"**{detection_mode}** detection: no event was found. "
+                    f"**{mode_used}** detection: no event was found. "
                     "If people appear sideways in the preview, choose the matching rotation; "
                     "for short low-to-floor moments, try Motion-sensitive and review every alert."
                 )
