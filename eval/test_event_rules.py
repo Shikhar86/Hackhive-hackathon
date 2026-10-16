@@ -32,6 +32,21 @@ def main():
     assert default_detector.person_down_height_drop == 0.1
     assert default_detector.person_down_frames == 3
     assert default_detector.crowd_threshold is None
+
+    # The tuned defaults should detect a sustained low/wide person while
+    # leaving an ordinary upright track unclassified.
+    default_detector = EventDetector()
+    upright = person(6, 0, 0, 40, 100)
+    for index in range(4):
+        assert default_detector.process_frame(frame(index, [upright])) == []
+
+    fallen = person(6, 0, 80, 100, 110)
+    assert default_detector.process_frame(frame(4, [fallen])) == []
+    assert default_detector.process_frame(frame(5, [fallen])) == []
+    events = default_detector.process_frame(frame(6, [fallen]))
+    assert len(events) == 1 and events[0].category == "person_down"
+    assert default_detector.process_frame(frame(7, [fallen])) == []
+
     crowd = [person(i, 0, 0, 20, 80) for i in range(8)]
     for index in range(3):
         assert not any(e.category == "crowd" for e in default_detector.process_frame(frame(index, crowd)))
