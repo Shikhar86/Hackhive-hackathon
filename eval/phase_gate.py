@@ -30,7 +30,11 @@ GATES = {
         },
     },
     1: {
-        "auto": {"ingest": "10-second video yields 20 timestamped samples at 2 FPS"},
+        "auto": {
+            "ingest": "10-second video yields 20 timestamped samples at 2 FPS",
+            "event_rules": "Crowd deduplication and person-down rule behavior",
+            "pipeline": "Synthetic detections become contract-shaped SQLite events",
+        },
         "manual": {
             "vision": "30-second tracks are stable; person-down fires on 2/3 labeled clips",
             "chat": "At least 15/20 fake-data questions correct; non-SELECT SQL rejected",
@@ -116,7 +120,27 @@ def check_ingest():
         main()
 
 
-AUTO_CHECKS = {"foundation": check_foundation, "opencv": check_opencv, "ingest": check_ingest}
+def check_event_rules():
+    from eval.test_event_rules import main
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        main()
+
+
+def check_pipeline():
+    from eval.test_pipeline import main
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        main()
+
+
+AUTO_CHECKS = {
+    "foundation": check_foundation,
+    "opencv": check_opencv,
+    "ingest": check_ingest,
+    "event_rules": check_event_rules,
+    "pipeline": check_pipeline,
+}
 
 
 def load_evidence():

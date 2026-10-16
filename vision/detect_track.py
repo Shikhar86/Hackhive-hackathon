@@ -2,9 +2,11 @@
 
 import argparse
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
+
+import numpy as np
 
 from vision.ingest import SampledFrame, sampled_frames
 
@@ -16,6 +18,17 @@ class TrackedFrame:
     video_time_s: float
     captured_at_utc: str
     tracks: list[dict]
+    image: Optional[np.ndarray] = field(default=None, repr=False)
+
+    def to_serializable_dict(self) -> dict:
+        """Return a JSON-safe dict (excludes the image array)."""
+        return {
+            "camera_id": self.camera_id,
+            "frame_index": self.frame_index,
+            "video_time_s": self.video_time_s,
+            "captured_at_utc": self.captured_at_utc,
+            "tracks": self.tracks,
+        }
 
 
 def detect_and_track(
@@ -67,6 +80,7 @@ def detect_and_track(
                 video_time_s=frame.video_time_s,
                 captured_at_utc=frame.captured_at_utc,
                 tracks=tracks,
+                image=frame.image,
             )
     finally:
         frames.close()
@@ -96,7 +110,7 @@ def main() -> None:
             ),
             start=1,
         ):
-            data = asdict(frame_result)
+            data = frame_result.to_serializable_dict()
             encoded = json.dumps(data, ensure_ascii=False)
             if output:
                 output.write(encoded + "\n")

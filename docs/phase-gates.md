@@ -27,7 +27,7 @@ Evidence is kept in `eval/gate_evidence.json`. Commit the evidence alongside the
 
 ## Gate 1 - independent modules, hours 3-15
 
-- **Automated:** `python -m eval.phase_gate check 1` creates a 10-second video, verifies 20 samples at 2 FPS, and checks original video timestamps. Run `python -m eval.test_ingest` to see frame numbers and times.
+- **Automated:** `python -m eval.phase_gate check 1` creates a 10-second video, verifies 20 samples at 2 FPS and their source timestamps, checks crowd/person-down rule behavior, and runs a synthetic detections-to-SQLite integration check. Run `python -m eval.test_ingest`, `python -m eval.test_event_rules`, or `python -m eval.test_pipeline` individually to inspect focused results.
 - **A:** run detection and ByteTrack on a 30-second clip; inspect IDs frame by frame. Run three labeled person-down clips and require triggers on at least two.
 - **B:** seed about 200 fake events. Save 20 questions and expected rows before running them; require at least 15 correct. Try `DROP`, `UPDATE`, and `DELETE` queries and require every one to be rejected.
 - **C:** open the dashboard on fake events; verify feed, key frames, filters, and chat responses.

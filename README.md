@@ -1,6 +1,6 @@
 # Live video event summarization system
 
-This repository is being built in phases for a 48-hour hackathon. The current working path is a mock event into SQLite. Run every phase gate before advancing; see [docs/phase-gates.md](docs/phase-gates.md).
+This repository is being built in phases for a 48-hour hackathon. Development, integration, and testing happen on one Windows laptop in this checkout. Phase 1 now includes sampled YOLO + ByteTrack detections, heuristic person-down and crowd events, SQLite storage, a read-only event chatbot, and a Streamlit dashboard. Run every phase gate before advancing; see [docs/phase-gates.md](docs/phase-gates.md).
 
 ## Problem statement 3 - acceptance target
 
@@ -15,6 +15,29 @@ The five named categories are examples in the brief; our 48-hour build plan trea
 .\.venv\Scripts\python.exe -c "from core.db import get_events; print(get_events())"
 .\.venv\Scripts\python.exe -m eval.phase_gate check 0
 ```
+
+## Phase 1 local workflow
+
+Put a test clip in `data/videos/` (video files are local-only and excluded from Git), then run the detector and tracker:
+
+```powershell
+.\.venv\Scripts\python.exe -m vision.detect_track data/videos/clip.mp4 --sample-fps 2 --jsonl data/videos/clip_tracks.jsonl
+```
+
+Run the full video-to-event pipeline and open the dashboard in another PowerShell window:
+
+```powershell
+.\.venv\Scripts\python.exe -m vision.run_pipeline data/videos/clip.mp4
+.\.venv\Scripts\python.exe -m streamlit run ui/app.py
+```
+
+Then open the local Streamlit address, usually `http://localhost:8501`, and check the feed, filters, keyframes, and chatbot. Run the Phase 1 gate with:
+
+```powershell
+.\.venv\Scripts\python.exe -m eval.phase_gate check 1
+```
+
+Current limitations: `person_down` and `crowd` use geometric/count heuristics; `fighting`, `tailgating`, and `suspicious` are not implemented in the vision pipeline. A vision-language model summary is also not yet connected. See `eval/gate_evidence.json` for the measured Phase 1 results.
 
 ## Frozen event contract
 
@@ -35,6 +58,6 @@ python -m pip install -r requirements.txt
 
 See [docs/gpu-smoke.md](docs/gpu-smoke.md) for measured results. Model downloads are cached locally and ignored by Git.
 
-## Team handoff
+## One-laptop work arrangement
 
-Person A owns vision and final integration on the main Windows laptop. Person B owns the database-backed chatbot and develops on CPU. Person C owns dashboard, evaluation, and report. Each person works on a branch and merges at gate checkpoints. Hand over source and dependency lists, not virtual environments.
+The team roles (vision, chatbot/data, dashboard/evaluation) are work assignments within this single checkout on the main Windows laptop. Keep one shared Python environment and database on that laptop; do not set up separate laptop clones for the hackathon workflow. Review and commit the integrated Phase 1 changes at the gate checkpoint, then push that checkpoint to GitHub. See [docs/team-handoff.md](docs/team-handoff.md) for the one-laptop workflow.

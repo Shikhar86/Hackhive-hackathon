@@ -1,7 +1,7 @@
 clip_id,relative_path,duration_s,fps,resolution,expected_category,annotation_status,file_availability
-v011_converted_3,eval/clips/v011_converted 3.avi,8.73,30,1280x720,,needs_ground_truth_label,local_only_gitignored
-v006_converted_3,eval/clips/v006_converted 3.avi,5.83,30,1280x720,,needs_ground_truth_label,local_only_gitignored
-w001_converted_3,eval/clips/w001_converted 3.avi,5.13,30,1280x720,,needs_ground_truth_label,local_only_gitignored
-v001_converted_3,eval/clips/v001_converted 3.avi,6.43,30,1280x720,,needs_ground_truth_label,local_only_gitignored
-v003_converted_3,eval/clips/v003_converted 3.avi,2.97,30,1280x720,,needs_ground_truth_label,local_only_gitignored
-v026_converted_3,eval/clips/v026_converted 3.avi,9.70,30,1280x720,,needs_ground_truth_label,local_only_gitignored
+v001_converted_3,eval/clips/v001_converted 3.avi,6.43,30,1280x720,,unlabeled_pending_review,local_only_gitignored
+v003_converted_3,eval/clips/v003_converted 3.avi,2.97,30,1280x720,,unlabeled_pending_review,local_only_gitignored
+v006_converted_3,eval/clips/v006_converted 3.avi,5.83,30,1280x720,,unlabeled_pending_review,local_only_gitignored
+v011_converted_3,eval/clips/v011_converted 3.avi,8.73,30,1280x720,,unlabeled_pending_review,local_only_gitignored
+v026_converted_3,eval/clips/v026_converted 3.avi,9.70,30,1280x720,,unlabeled_pending_review,local_only_gitignored
+w001_converted_3,eval/clips/w001_converted 3.avi,5.13,30,1280x720,,unlabeled_pending_review,local_only_gitignored

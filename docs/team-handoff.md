@@ -1,6 +1,6 @@
-# Team handoff - Gate 0
+# Team workflow - one laptop
 
-The main laptop now passes the schema, database, OpenCV, YOLO, and SmolVLM smoke checks. Work on separate Git branches and merge at each phase gate. Do not copy a virtual environment between laptops.
+All coding, integration, and testing happen on the main Windows laptop in this repository checkout. The vision, chatbot/data, and dashboard/evaluation roles describe areas of responsibility, not separate laptop environments. Work on the shared checkout in sequence, keep one `.venv` and SQLite database, run the phase checks, then commit and push the completed checkpoint to GitHub. Do not create teammate clones or copy virtual environments.
 
 ## Shared contract - freeze now
 
@@ -8,20 +8,20 @@ Import `Event` from `core.schema` and `insert_event`, `get_events` from `core.db
 
 Do not rename fields or category codes without telling everyone and changing the gate tests together.
 
-## Person B - chatbot and data (CPU laptop)
+## Chatbot and data role
 
-1. Clone the repo, create a Python 3.11 virtual environment, and confirm `python -c "from core.schema import Event; from core.db import init_db; init_db(); print('OK')"` works.
-2. Install Ollama and run one prompt with Qwen2.5 1.5B Instruct locally. Record the exact model tag, response, and elapsed time. Keep this model on CPU during the main-laptop demo.
-3. In your branch, build `chatbot/seed_fake_events.py` (about 200 events), `chatbot/text2sql.py`, and `chatbot/chat.py`. Restrict generated SQL to read-only `SELECT`; reject writes. Prepare 20 questions and expected rows before tuning.
-4. Send the branch or commit, dependency list, and test results to Person A by the hour-15 checkpoint.
+1. Work in `chatbot/` and `eval/` on the main laptop. The current `chatbot/chat.py` uses parameterized, read-only SQL; keep write requests rejected.
+2. Use `chatbot/seed_fake_events.py` to populate the local database, then run the saved 20-question evaluation and record the results.
+3. Keep changes in the shared checkout and tell the team when the chatbot/data work is ready for review.
 
-## Person C - dashboard and evaluation
+## Dashboard and evaluation role
 
-1. Clone the repo, create a Python 3.11 virtual environment, install Streamlit, and open a blank page locally. Record the command and page result.
-2. In your branch, build `ui/app.py` with a fake-event feed, filters, key-frame gallery, and chatbot stub. Start `eval/labels.csv` with clip ID, true category, and timestamp; gather 20-30 short clips.
-3. Prepare an evaluation sheet that records expected and observed events, pass/fail, latency, hardware, and commit. Avoid tuning against every evaluation clip.
-4. Send the branch or commit, dependency list, and UI/test results to Person A by the hour-15 checkpoint.
+1. Work in `ui/` and `eval/` on the main laptop using the shared `.venv` and database.
+2. Check the dashboard feed, category/camera filters, keyframes, and chatbot against known events.
+3. Maintain clip labels and evaluation results in the repository; do not commit private/local video files.
 
-## Gate 0 acknowledgement
+## Vision and integration role
 
-Each teammate should report: branch/commit, successful clone, schema import result, and their module's one-line smoke result. Person A then records `team_handoff` and `teammate_smoke` with those concrete results using `python -m eval.phase_gate record 0 ...`.
+1. Run sampling, YOLO, ByteTrack, event rules, and the SQLite pipeline on the main laptop.
+2. Review track IDs and event keyframes against labeled clips; record misses and false alerts without tuning on the entire evaluation set.
+3. Run `python -m eval.phase_gate check 1` after integrating the modules. Review the changes, commit the phase checkpoint, and push it to GitHub once its gate passes.

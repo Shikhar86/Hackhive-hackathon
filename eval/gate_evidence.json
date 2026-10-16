@@ -3,6 +3,9 @@
     "gpu_models": "RTX 3050 A 4 GB; YOLO detected 4 people; SmolVLM captioned image on CUDA; measurements in docs/gpu-smoke.md"
   },
   "1": {
-    "chat": "eval.test_chatbot on 200 synthetic events: 20/20 saved questions matched expected rows; DROP, UPDATE, and DELETE all rejected; fixture intact."
+    "chat": "eval.test_chatbot on 200 synthetic events: 20/20 saved questions matched expected rows; DROP, UPDATE, and DELETE all rejected; fixture intact.",
+    "ui": "User verified local Streamlit dashboard: person_down category filter shows the event; camera-1 selection retains its matching event; chatbot query 'show person down events' returns 1 matching row (screenshots supplied 2026-10-16).",
+    "merge": "Local main checkout: only branch is main; requirements check and ingest/chatbot/event-rule/pipeline tests pass; Streamlit UI interaction was verified by user screenshot; real-video pipeline produced a SQLite event and keyframe.",
+    "vision": "YOLO + ByteTrack on 33.2-second clip at 2 FPS: 67 sampled frames (0.0-33.0 s); primary person track ID 1 present in all 67 samples with no gaps; 1.84 detected people/sample average. Person-down labels: alerts matched 2/3 clear positive clips (first 30s clip and snow slip clip hit; icy-walk slip clip missed). Logs: data/videos/phase1_user_33s_tracks.jsonl and per-clip tracks."
   }
 }

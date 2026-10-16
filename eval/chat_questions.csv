@@ -7,15 +7,15 @@ Show tailgating events,tailgating,,,100
 Show crowd incidents,crowd,,,100
 Show suspicious activity,suspicious,,,100
 Show events from camera 2,,camera-2,,100
-Show events above 80% confidence,,,0.80,100
-Show person down events above 90%,person_down,,0.90,100
+Show events above 80% confidence,,,0.8,100
+Show person down events above 90%,person_down,,0.9,100
 Show the last 5 fighting events,fighting,,,5
 Show the latest 8 events from camera 1,,camera-1,,8
 Show the top 12 crowd events from camera 2,crowd,camera-2,,12
-Show events at least 60% confidence,,,0.60,100
-Show suspicious events from camera 1 above 70%,suspicious,camera-1,0.70,100
-Show the last 3 person down events from camera 2 above 80%,person_down,camera-2,0.80,3
+Show events at least 60% confidence,,,0.6,100
+Show suspicious events from camera 1 above 70%,suspicious,camera-1,0.7,100
+Show the last 3 person down events from camera 2 above 80%,person_down,camera-2,0.8,3
 Show person fell events from camera 1,person_down,camera-1,,100
-Show crowd events from camera 2 above 50%,crowd,camera-2,0.50,100
+Show crowd events from camera 2 above 50%,crowd,camera-2,0.5,100
 Show the last 7 tailgating events,tailgating,,,7
 Show camera 1 events at least 85% confidence,,camera-1,0.85,100
