@@ -22,7 +22,7 @@ These are detector outputs and visual-review notes, not a scored accuracy result
 - The first camera-filter query exposed a chatbot parser bug: IDs such as `v006` were rewritten as `camera-v006`. The parser now keeps alphabetic IDs intact and preserves the existing `camera-1` form. The regression check passes, and real queries return only the matching `v006` row or matching `v001` rows.
 - Two separate AVI sources have been processed under camera IDs `v006` and `v001`; this was a sequential replay, not a simultaneous multi-camera stress test.
 - `eval.test_real_chatbot` now evaluates 25 saved questions against the captured video-event rows (excluding the old mock event) and passes 25/25.
-- Do not mark the five-minute false-alarm, 25-question real-event chatbot, or ten-minute stability checks complete from this run.
+- The initial reference-clip run did not establish the later false-alarm, chatbot, or stability checks; their current evidence is recorded in the Phase 3 gate and the follow-up sections below.
 
 ## Detector recheck
 
@@ -38,3 +38,16 @@ Re-ran the existing person-down and crowd rules on all six supplied AVI clips on
 | `w001_converted 3.avi` | 11 | 2 | None |
 
 The supplied clips are only 3.0–9.7 seconds long. The two clips that meet the current count threshold (`v001`, `v006`) are not enough to score crowd against a three-clip set. The visually apparent falls/altercations also need frozen, clip-level labels and a consistent definition of `person_down` before recall can be scored. The blank worksheet remains intentionally unfilled rather than treating model outputs as ground truth.
+
+## Normal-footage false-alarm check
+
+On 2026-10-16, ran the default person-down and crowd rules on the user-provided fixed shop-camera clip `Recording 2026-10-16 065305.mp4`. The clip is 322.1 seconds (5 minutes 22 seconds), sampled at 2 FPS for 645 frames. The full video was reviewed at 30-second intervals and each alert frame was manually checked; the scene shows ordinary shopping, reaching, and bending, with no fall or crowd incident.
+
+| Result | Count / details |
+|---|---|
+| `person_down` alerts | 9, at 10.5, 115.0, 154.0, 157.0, 172.5, 177.5, 178.5, 222.0, and 300.5 seconds |
+| Reviewed false alerts | 9 of 9; people were standing, bending, or reaching for shelves |
+| `crowd` alerts | 0 |
+| Phase 3 false-alarm criterion | **Fail**; the requirement is fewer than 3 false alarms |
+
+A threshold-only sweep evaluated 96 combinations of person-down aspect ratio (0.8–1.4), height-drop threshold (0.25–0.55), and consecutive frames (2–5) against this clip and three candidate fall clips (`v001`, `v011`, `v003`). No tested setting both reduced the normal-clip person-down alerts below 3 and detected person-down in at least 2 of those 3 candidate clips. One setting (`aspect=1.2`, `height_drop=0.25`, `frames=5`) produced 1 normal-clip alert but detected only `v011`; it missed `v001` and `v003`. This setting was not retained. Defaults remain unchanged. The sweep is a small, clip-specific experiment, not a general accuracy claim.
