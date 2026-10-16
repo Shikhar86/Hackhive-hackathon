@@ -7,6 +7,9 @@ from pathlib import Path
 import cv2
 
 
+LOW_DETAIL_SHARPNESS_THRESHOLD = 300.0
+
+
 def footage_quality(source: Path) -> dict:
     """Sample a few decoded frames; these are advisory image checks, not AI accuracy scores."""
     capture = cv2.VideoCapture(str(source))
@@ -34,8 +37,11 @@ def footage_quality(source: Path) -> dict:
         warnings = []
         if brightness < 45:
             warnings.append("Footage appears dark; people may be missed.")
-        if sharpness < 45:
-            warnings.append("Footage may be blurry or low detail; check the preview.")
+        if sharpness < LOW_DETAIL_SHARPNESS_THRESHOLD:
+            warnings.append(
+                "Footage appears soft or low-detail. Small or fast-moving people may be missed; "
+                "review the video even if analysis finds zero alerts."
+            )
         return {"sampled": len(readings), "brightness": brightness, "sharpness": sharpness, "warnings": warnings}
     finally:
         capture.release()

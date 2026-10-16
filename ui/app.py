@@ -448,7 +448,7 @@ with video_preview:
                 st.warning(f"Preview unavailable: {type(exc).__name__}. Re-select the file or try a shorter clip before analysis.")
             else:
                 prepared_preview = preview_path
-                st.video(str(preview_path))
+                st.markdown("**Footage quality check**")
                 try:
                     quality = cached_footage_quality(str(preview_path))
                     if quality["warnings"]:
@@ -458,6 +458,7 @@ with video_preview:
                         st.caption("Quick footage check: no low-light or blur warning. This does not guarantee detection accuracy.")
                 except (OSError, cv2.error) as exc:
                     st.caption(f"Footage quality check unavailable ({type(exc).__name__}).")
+                st.video(str(preview_path))
     else:
         st.markdown(
             '<div class="ui-preview-empty"><b>◎</b><strong>Your footage appears here</strong>'
