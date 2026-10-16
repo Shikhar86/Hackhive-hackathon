@@ -396,6 +396,12 @@ with video_controls:
         help="Phone videos up to 1 GB are accepted. Keep this page open while the file transfers to the laptop.",
     )
     source_path = save_upload(uploaded_video) if uploaded_video is not None else None
+    previous_upload = st.session_state.get("active_upload_source")
+    current_upload = str(source_path) if source_path else None
+    if current_upload is None and (previous_upload or "active_upload_source" not in st.session_state):
+        st.session_state.pop("selected_event_id", None)
+        st.session_state.pop("replay_event_id", None)
+    st.session_state["active_upload_source"] = current_upload
     clip_duration = video_duration(source_path) if source_path else None
     orientation_hint = "As shown"
     if source_path:
@@ -440,6 +446,7 @@ with video_controls:
 prepared_preview = None
 with video_preview:
     st.caption("VIDEO PREVIEW")
+    preview_display = st.empty()
     if source_path:
         with st.spinner("Preparing a browser-compatible preview..."):
             try:
@@ -458,9 +465,9 @@ with video_preview:
                         st.caption("Quick footage check: no low-light or blur warning. This does not guarantee detection accuracy.")
                 except (OSError, cv2.error) as exc:
                     st.caption(f"Footage quality check unavailable ({type(exc).__name__}).")
-                st.video(str(preview_path))
+                preview_display.video(str(preview_path))
     else:
-        st.markdown(
+        preview_display.markdown(
             '<div class="ui-preview-empty"><b>◎</b><strong>Your footage appears here</strong>'
             '<small>Choose an MP4, AVI, or MOV file to preview it.</small></div>',
             unsafe_allow_html=True,
@@ -740,9 +747,9 @@ def render_event_feed():
     st.dataframe(table_data, width="stretch", hide_index=True)
 
     if st.session_state.get("selected_event_id") not in {event["id"] for event in filtered}:
-        st.session_state["selected_event_id"] = filtered[0]["id"]
+        st.session_state.pop("selected_event_id", None)
     st.subheader("Incident timeline")
-    st.caption("Choose one of the newest alerts, or open an older event from the list.")
+    st.caption("These are saved incidents from earlier analyses. Choose one to see its keyframe and details.")
     timeline_columns = st.columns(3)
     for index, event in enumerate(filtered[:6]):
         status = review_map.get(event["id"], "Unreviewed")
