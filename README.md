@@ -39,7 +39,18 @@ Then open the local Streamlit address, usually `http://localhost:8501`, and chec
 .\.venv\Scripts\python.exe -m eval.phase_gate check 1
 ```
 
-Current limitations: `person_down` and `crowd` use geometric/count heuristics; `fighting`, `tailgating`, and `suspicious` are not implemented in the vision pipeline. SmolVLM captions the event keyframe but does not independently validate the category. See `eval/gate_evidence.json` for the measured phase results.
+Current limitations: `person_down` uses a bounding-box heuristic and still exceeds the false-alarm target on the normal shop clip. SmolVLM captions the event keyframe but does not independently validate the category. See `eval/gate_evidence.json` for the measured phase results.
+
+### Phase 3 category scope
+
+For this build and demo, `person_down` is the only kept category. Its existing labeled-clip check detected events in 2 of 3 positive clips; the missed icy-walk clip and the shop false alarms remain documented failures. The following categories are cut from the current detector and demo:
+
+- `crowd`: the current eight-person count rule also flags an ordinary queue (`v006`), so it does not establish a harmful crowd incident.
+- `fighting`: no fighting classifier is implemented; the altercation examples (`v001`, `v003`, `v011`, and `w001`) are not detected as fighting events.
+- `tailgating`: no classifier or labeled test clips are available.
+- `suspicious`: no classifier or agreed labeled test set is available; a general-purpose label would be too vague to evaluate reliably.
+
+These are scope cuts for this build, not claims that the events are absent from surveillance footage. The event schema retains all five category values for compatibility.
 
 ## Frozen event contract
 
