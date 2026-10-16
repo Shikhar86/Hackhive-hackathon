@@ -61,8 +61,8 @@ Run the entire presentation twice with a timer, including the backup-video fallb
 
 | Check | Evidence required | Status |
 |---|---|---|
-| Fresh offline checkout | Clone path, commit, commands, no-network run result, real caption and keyframe | Pending |
-| Three full demos | Three consecutive screen-observed results covering video, event, dashboard and chatbot | Pending |
+| Fresh offline checkout | Clone path, commit, commands, no-network run result, real caption and keyframe | Complete on 2026-10-16; prepared local environment reused |
+| Three full demos | Three consecutive screen-observed results covering video, event, dashboard and chatbot | Complete on 2026-10-16 with the same reviewed clip |
 | Backup video | Path, duration, playback result, full-flow review | Pending |
 | Submission | Deadline and time zone, upload time, portal receipt, one-hour buffer | Pending |
 
@@ -73,3 +73,9 @@ Run `python -m eval.phase_gate check 6` to see the current gate. Record human ch
 A clean archive of commit `343b16c` was extracted into a temporary checkout. The local reviewed clip and YOLO weight were copied into it. The first pipeline run made two events but its captions fell back because the clean export did not include the SmolVLM cache. After setting `HF_HOME` to the main laptop's cache and setting `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`, three consecutive pipeline runs each made two `person_down` events with real SmolVLM captions. All six new keyframe paths existed. Camera-filtered chatbot queries returned two matching events for each of the three run IDs. This validates the offline processing path with the prepared local environment.
 
 The isolated Streamlit dashboard then displayed the saved events and keyframes. During an additional live pipeline replay, its feed changed from 8 to 10 events with the two new rows and keyframes, without a browser reload. A chatbot question restricted to that camera returned its two events. This was one browser-observed run, following three pipeline-only runs. It was an archive export, not a Git clone. Three complete browser-observed demos, backup recording review, and submission are still pending, so the Phase 6 gate remains open.
+
+## Fresh-clone gate evidence on 2026-10-16
+
+A local Git clone of `main` at commit `241fe1c` was made in `phase6_work/fresh_clone`. The laptop's local demo clip and YOLO weight were copied into the clone. The prepared `.venv` and `data/hf-cache` were reused, with `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`. The first pipeline run made two real-caption events with keyframes. Its dashboard displayed both events and keyframes, and the chatbot returned two rows for that camera. This establishes that a clean code clone runs offline with prepared dependencies and models; it does not establish that dependencies can be installed without a prebuilt environment.
+
+With the clone's Streamlit dashboard open and auto-refresh enabled, three further runs used camera IDs `phase6-demo-1`, `phase6-demo-2`, and `phase6-demo-3`. Each run exited successfully, produced two `person_down` events with real captions and JPEG keyframes, appeared in the dashboard without a browser reload, and returned two matching rows from a camera-filtered chatbot question. The feed count advanced from 2 to 4 to 6 to 8. The same reviewed clip was replayed each time, so this is a repeatability check rather than an accuracy measurement on unseen footage. `eval/gate_evidence.json` records both completed checks. Backup video playback and submission remain pending.
