@@ -45,6 +45,7 @@ def incident_report_html(
     *, label: str, camera_id: str, created_at: str, video_time: str,
     summary: str, reason: str, review_status: str, review_note: str,
     keyframe_path: Path | None, detector_score: float | None = None,
+    score_label: str = "Detector score",
 ) -> bytes:
     """Build a self-contained report that can be downloaded or printed to PDF."""
     escape = lambda value: html.escape(str(value), quote=True)
@@ -53,7 +54,7 @@ def incident_report_html(
         encoded = base64.b64encode(keyframe_path.read_bytes()).decode("ascii")
         picture = f'<img alt="Incident keyframe" src="data:image/jpeg;base64,{encoded}">'
     score = (
-        f"<p><strong>Detector score:</strong> {detector_score:.0%} (not a calibrated probability)</p>"
+        f"<p><strong>{escape(score_label)}:</strong> {detector_score:.0%} (not a calibrated fall probability)</p>"
         if detector_score is not None else "<p><strong>Detector score:</strong> None — operator flag</p>"
     )
     document = f"""<!doctype html>

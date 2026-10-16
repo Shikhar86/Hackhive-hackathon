@@ -29,6 +29,7 @@ from core.db import (
 )
 from vision.run_pipeline import run_pipeline
 from vision.orientation import suggest_video_orientation
+from vision.short_clip_review import propose_short_clip_review
 from ui.novelty import footage_quality, incident_report_html
 
 init_db()
@@ -417,7 +418,7 @@ with video_controls:
         "Person-down detection",
         ["Automatic (review fallback)", "Standard", "Motion-sensitive (experimental)"],
         key=f"detection_mode_{file_key}",
-        help="Automatic first uses the evaluated standard rule. If it finds nothing, it checks experimental low-posture review candidates. Review every alert.",
+        help="Automatic tries the evaluated Standard rule, then experimental low-posture review. On short clips with zero results, it may also use a local VLM crop review. Review every alert.",
     )
 
     if "camera_name" not in st.session_state:
@@ -426,7 +427,7 @@ with video_controls:
         st.session_state["camera_name"] = suggest_camera_name()
     camera_id = st.text_input("Camera name for this run", key="camera_name")
     st.caption("A new name keeps this run separate from earlier results.")
-    run_signature = ("orientation-v2", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
+    run_signature = ("short-clip-review-v1", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
     previous_run = st.session_state.get("latest_run")
     if previous_run and previous_run.get("run_signature") != run_signature:
         st.session_state.pop("latest_run", None)
@@ -470,9 +471,12 @@ if analyze_clicked:
     frame_count = [0]
     person_observations = [0]
     seen_track_ids = set()
+    short_clip_frames = []
 
     def show_sampled_frame(frame):
         frame_count[0] += 1
+        if clip_duration is not None and clip_duration <= 8:
+            short_clip_frames.append(frame)
         for track in frame.tracks:
             if track.get("class_name") == "person":
                 person_observations[0] += 1
@@ -511,8 +515,19 @@ if analyze_clicked:
                 frame_count[0] = 0
                 person_observations[0] = 0
                 seen_track_ids.clear()
+                short_clip_frames.clear()
                 created = analyze_once(True)
                 mode_used = "Motion-sensitive (automatic review fallback)"
+            if not created and detection_mode.startswith("Automatic") and clip_duration and clip_duration <= 8:
+                progress_slot.progress(0, text="Checking a short-clip VLM review candidate...")
+                try:
+                    created = propose_short_clip_review(
+                        short_clip_frames, str(analysis_source), camera_id.strip(),
+                    )
+                except Exception as exc:
+                    st.warning(f"Short-clip review fallback unavailable ({type(exc).__name__}).")
+                if created:
+                    mode_used = "VLM-assisted short-clip review"
         except Exception as exc:
             progress_slot.empty()
             st.error(f"Video analysis failed: {type(exc).__name__}: {exc}")
@@ -537,13 +552,13 @@ if analyze_clicked:
                 st.session_state["chat_question"] = (
                     f"Show person down events from camera {camera_id.strip()}"
                 )
-                st.success(f"Analysis complete: {len(created)} event(s) saved. See the feed below.")
+                st.success(f"Analysis complete: {len(created)} review candidate(s) saved. See the feed below.")
             else:
                 st.info(
                     f"Analysis complete with **{rotation}** orientation and "
                     f"**{mode_used}** detection: no event was found. "
-                    "If people appear sideways in the preview, choose the matching rotation; "
-                    "for short low-to-floor moments, try Motion-sensitive and review every alert."
+                    "Check the video orientation and use 'Flag a missed moment' below "
+                    "to record an incident that the AI missed."
                 )
 
 st.caption("Check that people are upright in the preview before analysis. Videos are processed on this laptop at 2 sampled frames per second. The original and its playback copy stay in the local data/videos folder.")
@@ -556,7 +571,7 @@ if latest_run:
         f"{latest_run.get('rotation', 'orientation unknown')} · "
         f"{latest_run.get('detection_mode', 'mode unknown')}"
     )
-    st.metric("New events", len(latest_run["events"]))
+    st.metric("New AI review candidates", len(latest_run["events"]))
     st.subheader("Analysis coverage")
     st.caption(
         f"Clip length: {display_video_time(latest_run.get('duration_s'))} · "
@@ -578,9 +593,8 @@ if latest_run:
                 evidence = get_event_evidence(event["id"])
                 if evidence:
                     st.write(f"**Video timestamp: {display_video_time(evidence['video_time_s'])}**")
-                st.caption(
-                    f"Score {event['confidence']:.0%} · Saved {display_time(event['timestamp'])}"
-                )
+                score_label = "Earlier YOLO person-box score" if event["summary"].startswith("VLM-assisted") else "Detector score"
+                st.caption(f"{score_label} {event['confidence']:.0%} · Saved {display_time(event['timestamp'])}")
     if latest_run["events"] and st.button("Ask the chatbot about this run"):
         st.session_state["chat_question"] = (
             f"Show person down events from camera {latest_run['camera_id']}"
@@ -716,7 +730,7 @@ def render_event_feed():
             "Time (local)": display_time(event["timestamp"]),
             "Camera": event["camera_id"],
             "Category": event["category"].replace("_", " ").title(),
-            "Confidence": f"{event['confidence']:.0%}",
+            "Score": f"{event['confidence']:.0%} track" if event["summary"].startswith("VLM-assisted") else f"{event['confidence']:.0%}",
             "Review": review_map.get(event["id"], "Unreviewed"),
             "Summary": event["summary"][:80],
         }
@@ -786,13 +800,15 @@ if selected_event:
             if selected_event.get("keyframe_path") else None
         )
         if keyframe_path and keyframe_path.is_file():
-            st.image(str(keyframe_path), caption="Detected moment · saved keyframe", width="stretch")
+            keyframe_caption = "VLM review crop · saved keyframe" if selected_event["summary"].startswith("VLM-assisted") else "Detected moment · saved keyframe"
+            st.image(str(keyframe_path), caption=keyframe_caption, width="stretch")
         else:
             st.info("No saved keyframe is available for this event.")
     with description_column:
         st.subheader(selected_event["category"].replace("_", " ").title())
         st.write(selected_event["summary"])
-        st.caption(f"Detector score: {selected_event['confidence']:.0%} · This is not a calibrated probability.")
+        score_label = "Earlier YOLO person-box score" if selected_event["summary"].startswith("VLM-assisted") else "Detector score"
+        st.caption(f"{score_label}: {selected_event['confidence']:.0%} · This is not a calibrated fall probability.")
         st.markdown("**Why was this flagged?**")
         if evidence and evidence["rule_reason"]:
             st.info(evidence["rule_reason"])
@@ -867,6 +883,7 @@ if selected_event:
             reason=evidence["rule_reason"] if evidence and evidence["rule_reason"] else "Detailed rule evidence unavailable.",
             review_status=review["status"], review_note=review["note"],
             keyframe_path=keyframe_path, detector_score=selected_event["confidence"],
+            score_label=("Earlier YOLO person-box score" if selected_event["summary"].startswith("VLM-assisted") else "Detector score"),
         ),
         help="Downloads one self-contained HTML file. Open it in a browser or print it to PDF.",
     )
