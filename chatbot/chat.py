@@ -67,7 +67,7 @@ def search_events(category=None, camera_id=None, min_confidence=None, limit=100,
         connection.close()
 
 
-def ask(question: str, db_path=None):
+def ask(question: str, db_path=None, semantic: bool = False):
     """Answer a supported event question and return rows for a UI to render."""
     text = question.strip()
     if not text:
@@ -75,5 +75,10 @@ def ask(question: str, db_path=None):
     if any(word in text.lower() for word in WRITE_WORDS):
         raise ValueError("Only read-only event questions are allowed")
     category, camera_id, min_confidence, limit = _filters(text)
-    events = search_events(category, camera_id, min_confidence, limit, db_path)
+    events = search_events(category, camera_id, min_confidence, 100 if semantic else limit, db_path)
+    if semantic and events:
+        from chatbot.semantic import rank_events
+
+        events = rank_events(text, events, limit)
+        return f"I found {len(events)} semantically ranked event(s).", events
     return (f"I found {len(events)} matching event(s).", events) if events else ("No matching events found.", [])

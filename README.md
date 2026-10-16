@@ -41,6 +41,12 @@ Then open the local Streamlit address, usually `http://localhost:8501`, and chec
 
 Current limitations: `person_down` uses a bounding-box heuristic; it misses the icy-walk slip and its tuning was evaluated at 2 FPS on the available clips. At 4 FPS the false-alert count rises, so do not change the sample rate without reevaluating. SmolVLM captions the event keyframe but does not independently validate the category. See `eval/gate_evidence.json` for the measured phase results.
 
+### Phase 4 optional feature: local semantic search
+
+The dashboard chatbot has a **Semantic search (local Ollama)** checkbox, off by default. With it off, the existing category, camera, confidence, and latest-event search is unchanged. With it on, those structured filters still apply, then the 100 most recent matching events are ranked by cosine similarity between the question and event summaries. The search uses the locally installed `nomic-embed-text` model through Ollama at `127.0.0.1:11434`; it does not call a paid cloud API. Start Ollama and confirm the model is available with `ollama list` before using this option. A local model error is shown in the dashboard rather than silently returning keyword results. Semantic ranking returns the best matches without a relevance cutoff, so inspect the summaries before treating a result as evidence.
+
+Phase 4 checks: `python -m eval.test_semantic` exercises the switch on and off with a paraphrased question; `python -m eval.phase4_vlm_ratio` counts attempted VLM calls on 645 saved samples from the 322.1-second normal clip; and `python -m eval.phase4_stability` runs the repeated 600-second clip with real YOLO, ByteTrack, SmolVLM, and keyframe saving into an isolated event database. The VLM ratio uses a caption stub to count call sites, so it does not measure caption latency or success. Privacy blur and incident grouping are not implemented in this build.
+
 ### Phase 3 category scope
 
 For this build and demo, `person_down` is the only kept category. Its labeled-clip check detects events in 2 of 3 positive clips, and the tuned 2 FPS rule produces 2 false alerts on the reviewed normal shop clip. The missed icy-walk clip remains documented. The following categories are cut from the standard detector/demo:

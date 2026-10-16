@@ -97,11 +97,12 @@ render_event_feed()
 # Chatbot
 # ---------------------------------------------------------------------------
 st.header("💬 Event Chatbot")
+semantic_search = st.checkbox("Semantic search (local Ollama)", value=False)
 question = st.text_input("Ask a question about stored events", placeholder="e.g. Show person down events from camera 1")
 
 if question:
     try:
-        message, rows = ask(question)
+        message, rows = ask(question, semantic=semantic_search)
         st.success(message)
         if rows:
             chat_table = [
@@ -115,5 +116,5 @@ if question:
                 for r in rows
             ]
             st.dataframe(chat_table, use_container_width=True)
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         st.error(str(exc))
