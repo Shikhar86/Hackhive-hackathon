@@ -23,3 +23,18 @@ These are detector outputs and visual-review notes, not a scored accuracy result
 - Two separate AVI sources have been processed under camera IDs `v006` and `v001`; this was a sequential replay, not a simultaneous multi-camera stress test.
 - `eval.test_real_chatbot` now evaluates 25 saved questions against the captured video-event rows (excluding the old mock event) and passes 25/25.
 - Do not mark the five-minute false-alarm, 25-question real-event chatbot, or ten-minute stability checks complete from this run.
+
+## Detector recheck
+
+Re-ran the existing person-down and crowd rules on all six supplied AVI clips on 2026-10-16 at 2 sampled FPS. This run bypassed event persistence and did not change the shared event database. `max_people` is the largest number of YOLO person tracks in any sampled frame; the crowd rule threshold is eight.
+
+| Clip | Sampled frames | Max people | Events emitted |
+|---|---:|---:|---|
+| `v001_converted 3.avi` | 13 | 12 | `crowd` at 0.0 s; `person_down` at 1.0 s |
+| `v003_converted 3.avi` | 6 | 5 | None |
+| `v006_converted 3.avi` | 12 | 13 | `crowd` at 0.0 s |
+| `v011_converted 3.avi` | 18 | 7 | `person_down` at 4.5 s |
+| `v026_converted 3.avi` | 20 | 0 | None |
+| `w001_converted 3.avi` | 11 | 2 | None |
+
+The supplied clips are only 3.0–9.7 seconds long. The two clips that meet the current count threshold (`v001`, `v006`) are not enough to score crowd against a three-clip set. The visually apparent falls/altercations also need frozen, clip-level labels and a consistent definition of `person_down` before recall can be scored. The blank worksheet remains intentionally unfilled rather than treating model outputs as ground truth.
