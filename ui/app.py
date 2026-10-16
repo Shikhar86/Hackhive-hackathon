@@ -23,7 +23,10 @@ import imageio_ffmpeg
 import cv2
 
 from chatbot.chat import ask
-from core.db import get_events, init_db
+from core.db import (
+    get_event, get_event_evidence, get_events, get_review, get_review_map,
+    init_db, set_review,
+)
 from vision.run_pipeline import run_pipeline
 
 init_db()
@@ -116,6 +119,12 @@ st.markdown(
     .ui-brand strong span { color: #e5a9d9; }
     .ui-brand small { display: block; margin-top: .45rem; color: #a994a9; }
     .ui-side-label { color: #bb9eb9; font-size: .68rem; font-weight: 700; letter-spacing: .18em; margin: .5rem .2rem .8rem; }
+    .ui-track-box {
+        padding: .8rem; border-radius: 18px; border: 1px solid #62495f;
+        background: radial-gradient(circle at 50% 50%, #2c202d, #120e16);
+    }
+    .ui-track-box svg { display: block; width: 100%; max-height: 250px; }
+    .ui-track-foot { color: #bba8b8; font-size: .75rem; margin-top: .5rem; }
     [data-testid="stFileUploaderDropzone"], [data-testid="stVideo"],
     [data-testid="stDataFrame"], [data-testid="stVerticalBlockBorderWrapper"] {
         background: #131016; border: 1px solid #5a4558 !important; border-radius: 20px !important;
@@ -250,6 +259,46 @@ def display_time(timestamp: str) -> str:
     except ValueError:
         return timestamp
 
+
+def video_frame_at(source_path: Path, seconds: float):
+    """Read one nearby frame for an incident storyboard."""
+    capture = cv2.VideoCapture(str(source_path))
+    try:
+        capture.set(cv2.CAP_PROP_POS_MSEC, max(0.0, seconds) * 1000)
+        ok, image = capture.read()
+        return cv2.cvtColor(image, cv2.COLOR_BGR2RGB) if ok else None
+    finally:
+        capture.release()
+
+
+def track_diagram(points: list[dict]) -> str:
+    """Draw a normalized track path without altering the saved keyframe."""
+    coordinates = []
+    for point in points:
+        try:
+            x = max(0.0, min(100.0, float(point["x_pct"])))
+            y = max(0.0, min(100.0, float(point["y_pct"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+        coordinates.append((x, y))
+    if not coordinates:
+        return ""
+    path = " ".join(f"{x:.1f},{y:.1f}" for x, y in coordinates)
+    start_x, start_y = coordinates[0]
+    end_x, end_y = coordinates[-1]
+    return (
+        '<div class="ui-track-box"><svg viewBox="0 0 100 100" role="img" '
+        'aria-label="Tracked person path across the video frame">'
+        '<rect x="1" y="1" width="98" height="98" rx="7" fill="none" stroke="#70576d"/>'
+        '<path d="M50 2 V98 M2 50 H98" stroke="#3b2d3b" stroke-dasharray="2 3"/>'
+        f'<polyline points="{path}" fill="none" stroke="#e5acd8" stroke-width="1.8" '
+        'stroke-linecap="round" stroke-linejoin="round"/>'
+        f'<circle cx="{start_x:.1f}" cy="{start_y:.1f}" r="2.3" fill="#83dcb2"/>'
+        f'<circle cx="{end_x:.1f}" cy="{end_y:.1f}" r="2.7" fill="#f4c4ea"/>'
+        '</svg><div class="ui-track-foot">Green: first observation · Pink: flagged position. '
+        'Positions are sampled box centers, not a continuous route.</div></div>'
+    )
+
 # ---------------------------------------------------------------------------
 # Local video upload and processing
 # ---------------------------------------------------------------------------
@@ -324,6 +373,7 @@ if analyze_clicked:
                 "events": [event.to_dict() for event in created],
             }
             if created:
+                st.session_state["selected_event_id"] = created[0].id
                 st.session_state["camera_filter"] = camera_id.strip()
                 st.session_state["chat_question"] = (
                     f"Show person down events from camera {camera_id.strip()}"
@@ -404,34 +454,150 @@ def render_event_feed():
         st.info("No events match the current filters.")
         return
 
-    st.write(f"Showing **{len(filtered)}** event(s)")
+    st.write(f"Showing **{len(filtered)}** event(s). Select a timeline card to inspect an incident.")
+    review_map = get_review_map()
     table_data = [
         {
             "Time (local)": display_time(event["timestamp"]),
             "Camera": event["camera_id"],
             "Category": event["category"].replace("_", " ").title(),
             "Confidence": f"{event['confidence']:.0%}",
+            "Review": review_map.get(event["id"], "Unreviewed"),
             "Summary": event["summary"][:80],
         }
         for event in filtered
     ]
-    st.dataframe(table_data, width="stretch")
+    st.dataframe(table_data, width="stretch", hide_index=True)
+
+    if st.session_state.get("selected_event_id") not in {event["id"] for event in filtered}:
+        st.session_state["selected_event_id"] = filtered[0]["id"]
+    st.subheader("Incident timeline")
+    st.caption("Choose one of the newest alerts, or open an older event from the list.")
+    timeline_columns = st.columns(3)
+    for index, event in enumerate(filtered[:6]):
+        status = review_map.get(event["id"], "Unreviewed")
+        label = f"{display_time(event['timestamp']).split('·')[-1].strip()} · {event['camera_id']} · {status}"
+        with timeline_columns[index % 3]:
+            if st.button(label, key=f"timeline_{event['id']}", use_container_width=True):
+                st.session_state["selected_event_id"] = event["id"]
+                st.rerun()
+    if len(filtered) > 6:
+        older = filtered[6:]
+        older_lookup = {event["id"]: event for event in older}
+        older_id = st.selectbox(
+            "Older incidents", options=[None, *older_lookup],
+            format_func=lambda event_id: "Choose an older incident" if event_id is None else (
+                f"{display_time(older_lookup[event_id]['timestamp'])} · "
+                f"{older_lookup[event_id]['camera_id']}"
+            ),
+        )
+        if older_id and st.button("Open older incident"):
+            st.session_state["selected_event_id"] = older_id
+            st.rerun()
 
     keyframe_events = [event for event in filtered if event.get("keyframe_path")]
     if keyframe_events:
-        st.header("Keyframes")
-        st.caption("Hover over a keyframe and select the expand icon to see it larger.")
-        cols = st.columns(min(len(keyframe_events), 4))
-        for idx, event in enumerate(keyframe_events[:12]):
-            col = cols[idx % len(cols)]
-            kf_path = ROOT / event["keyframe_path"]
-            if kf_path.is_file():
-                col.image(str(kf_path), caption=f"{event['category']} — {event['camera_id']}", width="stretch")
-            else:
-                col.warning(f"Missing: {event['keyframe_path']}")
+        with st.expander("Browse all keyframes"):
+            st.caption("Hover over a keyframe and select the expand icon to see it larger.")
+            cols = st.columns(min(len(keyframe_events), 4))
+            for idx, event in enumerate(keyframe_events[:12]):
+                col = cols[idx % len(cols)]
+                kf_path = ROOT / event["keyframe_path"]
+                if kf_path.is_file():
+                    col.image(str(kf_path), caption=f"{event['category']} — {event['camera_id']}", width="stretch")
+                else:
+                    col.warning(f"Missing: {event['keyframe_path']}")
 
 
 render_event_feed()
+
+selected_event_id = st.session_state.get("selected_event_id")
+selected_event = get_event(selected_event_id) if selected_event_id else None
+if selected_event:
+    evidence = get_event_evidence(selected_event_id)
+    review = get_review(selected_event_id)
+    st.header("Incident review")
+    st.caption(
+        f"{display_time(selected_event['timestamp'])} · {selected_event['camera_id']} · "
+        f"{review['status']}"
+    )
+    keyframe_column, description_column = st.columns([1, 1.15], gap="large")
+    with keyframe_column:
+        keyframe_path = (
+            ROOT / selected_event["keyframe_path"]
+            if selected_event.get("keyframe_path") else None
+        )
+        if keyframe_path and keyframe_path.is_file():
+            st.image(str(keyframe_path), caption="Detected moment · saved keyframe", width="stretch")
+        else:
+            st.info("No saved keyframe is available for this event.")
+    with description_column:
+        st.subheader(selected_event["category"].replace("_", " ").title())
+        st.write(selected_event["summary"])
+        st.caption(f"Detector score: {selected_event['confidence']:.0%} · This is not a calibrated probability.")
+        st.markdown("**Why was this flagged?**")
+        if evidence and evidence["rule_reason"]:
+            st.info(evidence["rule_reason"])
+        else:
+            st.info("Detailed rule evidence was not saved for this older event. Reanalyze its clip to add it.")
+        st.caption("A flagged posture is a possible incident. Review the footage before confirming a fall.")
+
+    if evidence:
+        source_file = Path(evidence["source_path"]) if evidence["source_path"] else None
+        moment = evidence["video_time_s"]
+        if source_file and source_file.is_file() and moment is not None:
+            st.subheader("Incident storyboard")
+            storyboard_columns = st.columns(3)
+            for column, label, seconds in zip(
+                storyboard_columns,
+                ("Before", "Flagged moment", "After"),
+                (max(0.0, moment - 2), moment, moment + 2),
+            ):
+                with column:
+                    image = video_frame_at(source_file, seconds)
+                    if image is not None:
+                        st.image(image, caption=f"{label} · {seconds:.1f}s", width="stretch")
+                    else:
+                        st.caption(f"{label}: frame unavailable")
+            if st.button("Play video near this incident", key=f"replay_{selected_event_id}"):
+                st.session_state["replay_event_id"] = selected_event_id
+            if st.session_state.get("replay_event_id") == selected_event_id:
+                with st.spinner("Preparing local playback..."):
+                    try:
+                        st.video(str(browser_preview(source_file)), start_time=max(0, int(moment - 3)))
+                    except (OSError, subprocess.SubprocessError) as exc:
+                        st.warning(f"Playback unavailable: {type(exc).__name__}.")
+        elif evidence["source_path"]:
+            st.caption("The original video is not on this laptop, so replay and nearby frames are unavailable.")
+
+        st.subheader("Track view")
+        if evidence["track_id"] is not None:
+            st.caption(
+                f"ByteTrack person ID {evidence['track_id']} · sampled frame {evidence['frame_index']} · "
+                f"video time {evidence['video_time_s']:.1f}s"
+            )
+            diagram = track_diagram(evidence["track_points"])
+            if diagram:
+                st.markdown(diagram, unsafe_allow_html=True)
+            else:
+                st.caption("Track coordinates were unavailable for this incident.")
+        else:
+            st.caption("This event was not linked to one person track.")
+    else:
+        st.caption("This older event has no saved video time or track evidence. Its keyframe and summary remain available.")
+
+    st.subheader("Human review")
+    with st.form(key=f"review_form_{selected_event_id}"):
+        statuses = ["Unreviewed", "Confirmed", "False alarm"]
+        status = st.selectbox("Decision", statuses, index=statuses.index(review["status"]))
+        note = st.text_area(
+            "Operator note", value=review["note"],
+            placeholder="Describe what you saw in the video and why you chose this decision.",
+        )
+        if st.form_submit_button("Save review"):
+            set_review(selected_event_id, status, note)
+            st.success("Review saved on this laptop.")
+            st.rerun()
 
 # ---------------------------------------------------------------------------
 # Chatbot

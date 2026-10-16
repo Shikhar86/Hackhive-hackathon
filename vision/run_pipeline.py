@@ -19,7 +19,7 @@ from pathlib import Path
 
 import cv2
 
-from core.db import insert_event
+from core.db import insert_event, insert_event_evidence
 from core.schema import Event
 from vision.detect_track import TrackedFrame, detect_and_track
 from vision.event_rules import DetectedEvent, EventDetector
@@ -83,8 +83,6 @@ def run_pipeline(
 
     Returns every Event that was created and persisted.
     """
-    from core.db import insert_event as _insert
-
     detector = EventDetector(
         person_down_aspect=person_down_aspect,
         person_down_height_drop=person_down_height_drop,
@@ -93,7 +91,19 @@ def run_pipeline(
     )
     created_events: list[Event] = []
 
-    insert = (lambda ev: _insert(ev, db_path)) if db_path else _insert
+    insert = (lambda ev: insert_event(ev, db_path)) if db_path else insert_event
+    source_file = Path(source)
+    local_source = str(source_file.resolve()) if source_file.is_file() else None
+
+    def record_evidence(event: Event, detected: DetectedEvent) -> None:
+        args = (
+            event.id, local_source, detected.video_time_s, detected.frame_index,
+            detected.track_id, detected.rule_reason, detected.track_points,
+        )
+        if db_path is not None:
+            insert_event_evidence(*args, db_path=db_path)
+        else:
+            insert_event_evidence(*args)
 
     frames_gen = detect_and_track(
         source, camera_id, sample_fps, model_path, tracker, confidence, device,
@@ -121,6 +131,10 @@ def run_pipeline(
                     keyframe_path=kf_path,
                 )
                 insert(event)
+                try:
+                    record_evidence(event, det)
+                except Exception as exc:
+                    print(f"WARNING: event saved but detailed evidence was unavailable ({type(exc).__name__})")
                 created_events.append(event)
                 print(f"EVENT: {json.dumps(event.to_dict(), ensure_ascii=False)}")
             if max_frames is not None and count >= max_frames:

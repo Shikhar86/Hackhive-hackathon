@@ -41,6 +41,8 @@ Then open the local Streamlit address, usually `http://localhost:8501`, and chec
 
 The dashboard accepts an uploaded MP4, AVI, or MOV file. It creates a browser-compatible H.264 Baseline playback copy with audio using the locally installed `imageio-ffmpeg` runtime; the original file remains the analysis input. Enter a camera name and choose **Analyze video** to run the same YOLO, ByteTrack, person-down, SmolVLM, and SQLite pipeline at the default 2 sampled frames per second. The dashboard shows sampled frames during analysis, then results in the event feed below. Both local files are kept under ignored `data/videos/uploads/`; they are not sent to a cloud service. A clip with no matching event will report zero events. Processing and preview conversion happen on the laptop and may take time for long clips.
 
+The **Incident timeline** opens a saved alert for human review. Its detail panel shows the keyframe, SmolVLM scene description, the rule measurements that triggered the alert, three nearby video frames, local playback near the event, and the tracked person's sampled path when available. Mark the alert **Confirmed** or **False alarm** and save an operator note. Reviews and detection evidence are stored in separate local SQLite tables; they do not change the original seven-field event format or the detector's output. Older events still open with their keyframes and summaries, but cannot show replay, track path, or detailed rule evidence unless their clip is analyzed again. The track diagram shows sampled bounding-box centers, not a continuous trajectory or proof that a fall occurred. The detector score is not a calibrated probability.
+
 Run the Phase 1 gate with:
 
 ```powershell

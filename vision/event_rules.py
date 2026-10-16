@@ -28,6 +28,9 @@ class DetectedEvent:
     video_time_s: float
     captured_at_utc: str
     image: Optional[np.ndarray] = field(default=None, repr=False)
+    track_id: Optional[int] = None
+    rule_reason: str = ""
+    track_points: list[dict] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -96,12 +99,15 @@ class EventDetector:
             x1, y1, x2, y2 = track["xyxy"]
             w = x2 - x1
             h = y2 - y1
+            image_h, image_w = frame.image.shape[:2] if frame.image is not None else (0, 0)
             self._history[tid].append({
                 "frame_index": frame.frame_index,
                 "video_time_s": frame.video_time_s,
                 "confidence": track["confidence"],
                 "w": w,
                 "h": h,
+                "x_pct": round((x1 + x2) * 50 / image_w, 2) if image_w else None,
+                "y_pct": round((y1 + y2) * 50 / image_h, 2) if image_h else None,
             })
             self._max_height[tid] = max(self._max_height.get(tid, 0.0), h)
 
@@ -147,6 +153,27 @@ class EventDetector:
 
             if qualifying >= self.person_down_frames:
                 avg_conf = sum(o["confidence"] for o in recent) / len(recent)
+                last = recent[-1]
+                aspect = last["w"] / last["h"] if last["h"] > 0 else 0
+                height_ratio = last["h"] / max_h if max_h > 0 else 1
+                if self.person_down_requires_transition:
+                    reason = (
+                        f"Track {tid} changed from an observed upright posture to a wide, lower posture "
+                        f"for {qualifying} sampled frames. Last box width/height: {aspect:.2f}; "
+                        f"threshold: {self.person_down_aspect:.2f}."
+                    )
+                else:
+                    reason = (
+                        f"Track {tid} met the wide-box or height-drop rule in {qualifying} consecutive "
+                        f"sampled frames. Last box width/height: {aspect:.2f} "
+                        f"(threshold {self.person_down_aspect:.2f}); height: {height_ratio:.0%} "
+                        f"of the tallest observed box (threshold {self.person_down_height_drop:.0%})."
+                    )
+                path = [
+                    {"time_s": obs["video_time_s"], "x_pct": obs["x_pct"], "y_pct": obs["y_pct"]}
+                    for obs in history[-40:]
+                    if obs["x_pct"] is not None and obs["y_pct"] is not None
+                ]
                 self._fired.add(key)
                 events.append(DetectedEvent(
                     camera_id=frame.camera_id,
@@ -162,6 +189,9 @@ class EventDetector:
                     video_time_s=frame.video_time_s,
                     captured_at_utc=frame.captured_at_utc,
                     image=frame.image,
+                    track_id=tid,
+                    rule_reason=reason,
+                    track_points=path,
                 ))
 
         # --- crowd rule -----------------------------------------------------
@@ -186,6 +216,7 @@ class EventDetector:
                 video_time_s=frame.video_time_s,
                 captured_at_utc=frame.captured_at_utc,
                 image=frame.image,
+                rule_reason=f"{len(person_tracks)} people were visible in one sampled frame (threshold {self.crowd_threshold}).",
             ))
         elif not is_crowd:
             self._crowd_active.discard(frame.camera_id)
