@@ -1,0 +1,50 @@
+{
+  "source": "phase1_user_30s.mp4",
+  "device": "NVIDIA GeForce RTX 3050 A Laptop GPU",
+  "sample_fps": 2.0,
+  "total_pipeline_s": 34.71,
+  "frames": 60,
+  "events": 2,
+  "caption_fallbacks": 0,
+  "chat_db_rows": 30,
+  "stages": {
+    "detect_track": {
+      "samples": 60,
+      "average_ms": 244.2,
+      "worst_ms": 9572.69
+    },
+    "caption": {
+      "samples": 2,
+      "average_ms": 9885.17,
+      "worst_ms": 17532.96
+    },
+    "keyframe": {
+      "samples": 2,
+      "average_ms": 23.65,
+      "worst_ms": 26.77
+    },
+    "db_write": {
+      "samples": 2,
+      "average_ms": 57.74,
+      "worst_ms": 77.89
+    },
+    "chatbot": {
+      "samples": 25,
+      "average_ms": 7.29,
+      "worst_ms": 10.27
+    },
+    "dashboard_db_read": {
+      "samples": 25,
+      "average_ms": 7.4,
+      "worst_ms": 9.02
+    }
+  },
+  "first_detect_track_ms_includes_model_load": 9572.69,
+  "warm_detect_track": {
+    "samples": 59,
+    "average_ms": 86.09,
+    "worst_ms": 115.76
+  },
+  "event_to_visible_dashboard_ms": null,
+  "dashboard_note": "Database read is measured; browser display delay has not been measured. The UI refresh interval is configured at 5 seconds."
+}

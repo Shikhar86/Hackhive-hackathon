@@ -1,0 +1,13 @@
+{
+  "browser": "Headless Chrome, local Streamlit port 8504",
+  "refresh_interval_s": 5,
+  "samples": 3,
+  "event_to_dashboard_dom_ms": [
+    4977,
+    4921,
+    4430
+  ],
+  "average_ms": 4776,
+  "worst_ms": 4977,
+  "note": "Commit timestamp to updated dashboard table cell in the browser DOM; this does not time pixel paint. Isolated temporary database."
+}
