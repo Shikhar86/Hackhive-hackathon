@@ -60,6 +60,7 @@ class EventDetector:
         person_down_height_drop: float = 0.55,
         person_down_frames: int = 3,
         crowd_threshold: int = 8,
+        person_down_requires_transition: bool = False,
     ):
         # Per-track history: track_id -> list of observation dicts
         self._history: dict[int, list[dict]] = defaultdict(list)
@@ -73,6 +74,9 @@ class EventDetector:
         self.person_down_height_drop = person_down_height_drop
         self.person_down_frames = person_down_frames
         self.crowd_threshold = crowd_threshold
+        # Experimental opt-in: require an observed upright-to-low transition.
+        # The default keeps the shipped detector behavior unchanged.
+        self.person_down_requires_transition = person_down_requires_transition
 
     # ------------------------------------------------------------------
     def process_frame(self, frame: TrackedFrame) -> list[DetectedEvent]:
@@ -112,12 +116,31 @@ class EventDetector:
             recent = history[-self.person_down_frames:]
             max_h = self._max_height.get(tid, 1.0)
 
-            qualifying = 0
-            for obs in recent:
-                aspect = obs["w"] / obs["h"] if obs["h"] > 0 else 0
-                height_ratio = obs["h"] / max_h if max_h > 0 else 1
-                if aspect > self.person_down_aspect or height_ratio < self.person_down_height_drop:
-                    qualifying += 1
+            if self.person_down_requires_transition:
+                # Establish a standing baseline, then require a low/wide
+                # posture relative to that baseline for the configured run.
+                # A person first seen already on the ground is not a fall
+                # transition and must not be labeled as one.
+                upright_heights = [
+                    obs["h"] for obs in history
+                    if obs["h"] > 0 and obs["w"] / obs["h"] <= 0.8
+                ]
+                if not upright_heights:
+                    continue
+                upright_max_h = max(upright_heights)
+                qualifying = 0
+                for obs in recent:
+                    aspect = obs["w"] / obs["h"] if obs["h"] > 0 else 0
+                    low_vs_upright = obs["h"] < upright_max_h * 0.75
+                    if aspect > self.person_down_aspect and low_vs_upright:
+                        qualifying += 1
+            else:
+                qualifying = 0
+                for obs in recent:
+                    aspect = obs["w"] / obs["h"] if obs["h"] > 0 else 0
+                    height_ratio = obs["h"] / max_h if max_h > 0 else 1
+                    if aspect > self.person_down_aspect or height_ratio < self.person_down_height_drop:
+                        qualifying += 1
 
             if qualifying >= self.person_down_frames:
                 avg_conf = sum(o["confidence"] for o in recent) / len(recent)

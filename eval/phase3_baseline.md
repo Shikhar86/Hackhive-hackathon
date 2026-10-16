@@ -55,3 +55,19 @@ A threshold-only sweep evaluated 96 combinations of person-down aspect ratio (0.
 ## Mixed-scene follow-up clip
 
 The user also supplied `Recording 2026-10-16 071114.mp4` (314.5 seconds). It is a montage of different outdoor, sports, play, and home scenes rather than one continuous camera view. At 2 sampled FPS, the default rules processed 629 frames and emitted 16 `person_down` events and 1 `crowd` event. The event frames and short surrounding context were reviewed. Several sequences may provide candidate fall examples (around 72–77 s, 115–120 s, and 193–196 s), while other alerts occur during play, exercise, swimming, or when a person is already resting on the ground. These events have not been assigned confirmed ground-truth labels, so this montage is not scored as a detector accuracy set or as a normal-footage false-alarm check. Tentative time ranges and candidate labels are listed in `eval/phase3_person_down_segments.csv` for review before the motion rule is evaluated.
+
+## Opt-in posture-transition experiment
+
+Added an opt-in experimental mode to `EventDetector` that requires an observed upright person, followed by a low/wide bounding box for three sampled observations. The default mode is unchanged. Focused rule checks pass for an upright-to-low sequence, for someone first seen already down (no transition alert), and for existing default behavior.
+
+Replayed the cached YOLO + ByteTrack tracks at 2 FPS:
+
+| Clip | Existing rule | Transition experiment |
+|---|---:|---:|
+| Normal shop, 322 s | 9 alerts | 1 alert |
+| Follow-up montage, 314 s | 16 alerts | 0 alerts |
+| `v001_converted 3.avi` | 1 alert | 0 alerts |
+| `v011_converted 3.avi` | 1 alert | 0 alerts |
+| `v003_converted 3.avi` | 0 alerts | 0 alerts |
+
+The experiment substantially lowers alerts on this one normal clip but misses all candidate fall clips in this small replay. It is not a usable replacement and was not enabled by default. The remaining shop alert is at 193.0 s. This does not pass the Phase 3 false-alarm criterion because the default implementation still produces nine reviewed false alerts; Gate 3 remains open. Track continuity, sampling rate, camera view, and confirmed segment labels need to be improved before this motion rule can be judged fairly.

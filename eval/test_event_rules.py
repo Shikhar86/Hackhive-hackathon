@@ -43,7 +43,25 @@ def main():
     events = detector.process_frame(frame(3, [fallen]))
     assert len(events) == 1 and events[0].category == "person_down"
     assert detector.process_frame(frame(4, [fallen])) == []
-    print("PASS: crowd alerts deduplicate and re-arm after dispersal; person-down fires once after three qualifying frames")
+
+    # Opt-in transition mode: must observe an upright baseline before a
+    # sustained low/wide posture. Someone already down on first detection
+    # does not count as a fall event.
+    detector = EventDetector(person_down_frames=3, person_down_requires_transition=True)
+    standing = person(8, 0, 0, 30, 100)
+    fallen = person(8, 0, 70, 100, 100)
+    assert detector.process_frame(frame(0, [standing])) == []
+    assert detector.process_frame(frame(1, [fallen])) == []
+    assert detector.process_frame(frame(2, [fallen])) == []
+    events = detector.process_frame(frame(3, [fallen]))
+    assert len(events) == 1 and events[0].category == "person_down"
+
+    detector = EventDetector(person_down_frames=3, person_down_requires_transition=True)
+    already_down = person(9, 0, 70, 100, 100)
+    for index in range(5):
+        assert detector.process_frame(frame(index, [already_down])) == []
+
+    print("PASS: crowd alerts deduplicate/re-arm; default person-down behavior remains; opt-in transition rule requires upright-to-low posture")
 
 
 if __name__ == "__main__":
