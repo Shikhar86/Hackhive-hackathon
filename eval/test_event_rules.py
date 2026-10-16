@@ -1,18 +1,20 @@
 """Focused checks for the stateful event heuristics."""
 
 from datetime import datetime, timezone
+import numpy as np
 
 from vision.detect_track import TrackedFrame
 from vision.event_rules import EventDetector
 
 
-def frame(index, tracks):
+def frame(index, tracks, image=None):
     return TrackedFrame(
         camera_id="camera-test",
         frame_index=index,
         video_time_s=index / 2,
         captured_at_utc=datetime.now(timezone.utc).isoformat(),
         tracks=tracks,
+        image=image,
     )
 
 
@@ -100,6 +102,22 @@ def main():
     assert len(events) == 1 and events[0].category == "person_down"
     assert "possible low posture" in events[0].rule_reason
     assert detector.process_frame(frame(5, [person(10, 0, 50, 60, 100)])) == []
+
+    # A small, moderately wide person low in the visible floor area can be
+    # proposed for review even without a reliable prior standing box.
+    image = np.zeros((576, 1024, 3), dtype=np.uint8)
+    detector = EventDetector(
+        person_down_aspect=1.05, person_down_frames=2,
+        person_down_motion_ratio=0.75, person_down_floor_review=True,
+    )
+    edge = person(20, 0, 250, 140, 410)
+    low = person(21, 529, 279, 632, 416)
+    assert detector.process_frame(frame(0, [edge, low], image)) == []
+    assert detector.process_frame(frame(4, [edge, low], image)) == []  # gap is too long
+    events = detector.process_frame(frame(5, [edge, low], image))
+    assert len(events) == 1 and events[0].track_id == 21
+    assert "needs human review" in events[0].rule_reason
+    assert detector.process_frame(frame(6, [edge, low], image)) == []
 
     print("PASS: crowd, tuned person-down default, transition mode, and optional motion-sensitive mode behave as expected")
 

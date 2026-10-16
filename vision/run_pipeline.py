@@ -75,6 +75,7 @@ def run_pipeline(
     person_down_height_drop: float = 0.1,
     person_down_frames: int = 3,
     person_down_motion_ratio: float | None = None,
+    person_down_floor_review: bool = False,
     crowd_threshold: int | None = None,
     use_vlm: bool = True,
     db_path=None,
@@ -89,6 +90,7 @@ def run_pipeline(
         person_down_height_drop=person_down_height_drop,
         person_down_frames=person_down_frames,
         person_down_motion_ratio=person_down_motion_ratio,
+        person_down_floor_review=person_down_floor_review,
         crowd_threshold=crowd_threshold,
     )
     created_events: list[Event] = []
@@ -166,6 +168,7 @@ def main() -> None:
     parser.add_argument("--person-down-height-drop", type=float, default=0.1)
     parser.add_argument("--person-down-frames", type=int, default=3)
     parser.add_argument("--person-down-motion-ratio", type=float, default=None)
+    parser.add_argument("--person-down-floor-review", action="store_true")
     parser.add_argument(
         "--crowd-threshold", type=int, default=None,
         help="Enable the experimental count-only crowd rule at this people count (disabled by default)",
@@ -194,6 +197,7 @@ def main() -> None:
         person_down_height_drop=args.person_down_height_drop,
         person_down_frames=args.person_down_frames,
         person_down_motion_ratio=args.person_down_motion_ratio,
+        person_down_floor_review=args.person_down_floor_review,
         crowd_threshold=args.crowd_threshold,
         use_vlm=not args.no_vlm,
     )

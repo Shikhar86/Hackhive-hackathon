@@ -55,6 +55,10 @@ class EventDetector:
     person_down_motion_ratio : float | None
         Optional sensitive mode: also require a wider box to shrink below this
         fraction of the same track's tallest observed box. Disabled by default.
+    person_down_floor_review : bool
+        Optional review proposal for sustained low, moderately wide person
+        boxes in the visible floor area. This is scene dependent and is not
+        proof of a fall. Disabled by default.
     crowd_threshold : int | None
         Minimum number of simultaneously visible people to trigger a
         crowd event. None disables this experimental count-only rule; this
@@ -69,6 +73,7 @@ class EventDetector:
         crowd_threshold: int | None = None,
         person_down_requires_transition: bool = False,
         person_down_motion_ratio: float | None = None,
+        person_down_floor_review: bool = False,
     ):
         # Per-track history: track_id -> list of observation dicts
         self._history: dict[int, list[dict]] = defaultdict(list)
@@ -84,6 +89,7 @@ class EventDetector:
         if person_down_motion_ratio is not None and not 0 < person_down_motion_ratio < 1:
             raise ValueError("person_down_motion_ratio must be between 0 and 1")
         self.person_down_motion_ratio = person_down_motion_ratio
+        self.person_down_floor_review = person_down_floor_review
         if crowd_threshold is not None and crowd_threshold < 1:
             raise ValueError("crowd_threshold must be positive or None")
         self.crowd_threshold = crowd_threshold
@@ -107,12 +113,22 @@ class EventDetector:
             w = x2 - x1
             h = y2 - y1
             image_h, image_w = frame.image.shape[:2] if frame.image is not None else (0, 0)
+            aspect = w / h if h > 0 else 0
+            floor_review_candidate = bool(
+                self.person_down_floor_review
+                and image_h and image_w and h > 0
+                and aspect > 0.72 and h / image_h < 0.36
+                and 0.65 < y2 / image_h < 0.98
+                and x1 / image_w > 0.02 and x2 / image_w < 0.98
+                and track["confidence"] > 0.6
+            )
             self._history[tid].append({
                 "frame_index": frame.frame_index,
                 "video_time_s": frame.video_time_s,
                 "confidence": track["confidence"],
                 "w": w,
                 "h": h,
+                "floor_review_candidate": floor_review_candidate,
                 "x_pct": round((x1 + x2) * 50 / image_w, 2) if image_w else None,
                 "y_pct": round((y1 + y2) * 50 / image_h, 2) if image_h else None,
             })
@@ -156,9 +172,13 @@ class EventDetector:
                     aspect = obs["w"] / obs["h"] if obs["h"] > 0 else 0
                     height_ratio = obs["h"] / max_h if max_h > 0 else 1
                     if self.person_down_motion_ratio is not None:
-                        matches = (
+                        wide_and_lower = (
                             aspect > self.person_down_aspect
                             and height_ratio < self.person_down_motion_ratio
+                        )
+                        matches = wide_and_lower or (
+                            self.person_down_floor_review
+                            and obs["floor_review_candidate"]
                         )
                     else:
                         matches = (
@@ -167,6 +187,11 @@ class EventDetector:
                         )
                     if matches:
                         qualifying += 1
+                if self.person_down_motion_ratio is not None and any(
+                    b["video_time_s"] - a["video_time_s"] > 0.8
+                    for a, b in zip(recent, recent[1:])
+                ):
+                    qualifying = 0
 
             if qualifying >= self.person_down_frames:
                 avg_conf = sum(o["confidence"] for o in recent) / len(recent)
@@ -180,14 +205,24 @@ class EventDetector:
                         f"threshold: {self.person_down_aspect:.2f}."
                     )
                 elif self.person_down_motion_ratio is not None:
-                    reason = (
-                        f"Track {tid} became wider and lower for {qualifying} consecutive sampled "
-                        f"frames. Last box width/height: {aspect:.2f} "
-                        f"(threshold {self.person_down_aspect:.2f}); height: {height_ratio:.0%} "
-                        f"of its tallest observed box (must be below "
-                        f"{self.person_down_motion_ratio:.0%}). This is a possible low posture, "
-                        "not proof of a fall."
-                    )
+                    if self.person_down_floor_review and all(
+                        obs["floor_review_candidate"] for obs in recent
+                    ):
+                        reason = (
+                            f"Track {tid} had a moderately wide, low person box within the visible "
+                            f"floor area for {qualifying} sampled frames. Last width/height: "
+                            f"{aspect:.2f}. This scene-dependent proposal needs human review; "
+                            "it is not proof of a fall."
+                        )
+                    else:
+                        reason = (
+                            f"Track {tid} became wider and lower for {qualifying} consecutive sampled "
+                            f"frames. Last box width/height: {aspect:.2f} "
+                            f"(threshold {self.person_down_aspect:.2f}); height: {height_ratio:.0%} "
+                            f"of its tallest observed box (must be below "
+                            f"{self.person_down_motion_ratio:.0%}). This is a possible low posture, "
+                            "not proof of a fall."
+                        )
                 else:
                     reason = (
                         f"Track {tid} met the wide-box or height-drop rule in {qualifying} consecutive "

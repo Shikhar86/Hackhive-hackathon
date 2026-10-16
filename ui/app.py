@@ -359,7 +359,7 @@ with video_controls:
     detection_mode = st.selectbox(
         "Person-down detection",
         ["Standard", "Motion-sensitive (experimental)"],
-        help="Motion-sensitive mode can catch shorter low-posture moments, but may create more false alerts. Review each result.",
+        help="Motion-sensitive mode also proposes sustained low postures in the visible floor area. It can create false alerts; review every result.",
     )
 
     if "camera_name" not in st.session_state:
@@ -418,6 +418,7 @@ if analyze_clicked:
                 person_down_aspect=1.05 if detection_mode.startswith("Motion-sensitive") else 1.2,
                 person_down_frames=2 if detection_mode.startswith("Motion-sensitive") else 3,
                 person_down_motion_ratio=0.75 if detection_mode.startswith("Motion-sensitive") else None,
+                person_down_floor_review=detection_mode.startswith("Motion-sensitive"),
             )
         except Exception as exc:
             progress_slot.empty()
@@ -427,6 +428,8 @@ if analyze_clicked:
             st.session_state["latest_run"] = {
                 "camera_id": camera_id.strip(),
                 "video_name": uploaded_video.name,
+                "rotation": rotation,
+                "detection_mode": detection_mode,
                 "events": [event.to_dict() for event in created],
             }
             if created:
@@ -437,14 +440,23 @@ if analyze_clicked:
                 )
                 st.success(f"Analysis complete: {len(created)} event(s) saved. See the feed below.")
             else:
-                st.info("Analysis complete. No person-down event was detected in this video.")
+                st.info(
+                    f"Analysis complete with **{rotation}** orientation and "
+                    f"**{detection_mode}** detection: no event was found. "
+                    "If people appear sideways in the preview, choose the matching rotation; "
+                    "for short low-to-floor moments, try Motion-sensitive and review every alert."
+                )
 
 st.caption("Check that people are upright in the preview before analysis. Videos are processed on this laptop at 2 sampled frames per second. The original and its playback copy stay in the local data/videos folder.")
 
 latest_run = st.session_state.get("latest_run")
 if latest_run:
     st.subheader("Results from the latest analysis")
-    st.caption(f"{latest_run['video_name']} · camera {latest_run['camera_id']}")
+    st.caption(
+        f"{latest_run['video_name']} · camera {latest_run['camera_id']} · "
+        f"{latest_run.get('rotation', 'orientation unknown')} · "
+        f"{latest_run.get('detection_mode', 'mode unknown')}"
+    )
     st.metric("New events", len(latest_run["events"]))
     for event in latest_run["events"]:
         with st.container(border=True):
@@ -455,6 +467,9 @@ if latest_run:
                     st.image(str(keyframe), width="stretch")
             with details:
                 st.write(f"**{event['category'].replace('_', ' ').title()}** — {event['summary']}")
+                evidence = get_event_evidence(event["id"])
+                if evidence:
+                    st.write(f"**Video timestamp: {display_video_time(evidence['video_time_s'])}**")
                 st.caption(
                     f"Score {event['confidence']:.0%} · Saved {display_time(event['timestamp'])}"
                 )
