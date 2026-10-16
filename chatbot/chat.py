@@ -80,5 +80,5 @@ def ask(question: str, db_path=None, semantic: bool = False):
         from chatbot.semantic import rank_events
 
         events = rank_events(text, events, limit)
-        return f"I found {len(events)} semantically ranked event(s).", events
+        return f"I found {len(events)} semantically ranked event(s) among up to 100 recent matching events.", events
     return (f"I found {len(events)} matching event(s).", events) if events else ("No matching events found.", [])

@@ -47,7 +47,7 @@ The supplied reference-clip baseline and blank label worksheet are in `eval/phas
 
 ## Gate 4 - optional novelty, hours 32-38
 
-Start only after gate 3. For each feature kept, test its config switch both on and off. Measure the fraction of sampled frames sent to the VLM on a five-minute clip. Prove one semantic query succeeds beyond keyword matching. Run all kept features for 10 minutes and confirm replay stays at or above real-time speed. Cut a feature that fails by hour 38.
+Start only after gate 3. For each feature kept, test its config switch both on and off. Measure the fraction of sampled frames sent to the VLM on a five-minute clip. Prove one semantic query succeeds beyond keyword matching. Run all kept features for 10 minutes and confirm replay stays at or above real-time speed. Cut a feature that fails by hour 38. `python -m eval.phase_gate check 4` reruns the semantic-search regression against the local Ollama model; the VLM ratio and long replay remain recorded human checks, so their evidence does not mean they were rerun by the gate command.
 
 ## Gate 5 - evaluation, hours 38-43
 

@@ -61,11 +61,10 @@ GATES = {
         },
     },
     4: {
-        "auto": {},
+        "auto": {"semantic": "Local semantic search ranks a paraphrased event above the latest distractor"},
         "manual": {
             "switches": "Each kept novelty feature works on and off",
             "metrics": "VLM call percentage measured on a 5-minute clip",
-            "semantic": "Semantic query finds an event beyond keyword matching",
             "stability": "10-minute all-features run remains real-time and crash-free",
         },
     },
@@ -141,6 +140,13 @@ def check_vlm_pipeline():
         main()
 
 
+def check_semantic():
+    from eval.test_semantic import main
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        main()
+
+
 AUTO_CHECKS = {
     "foundation": check_foundation,
     "opencv": check_opencv,
@@ -148,6 +154,7 @@ AUTO_CHECKS = {
     "event_rules": check_event_rules,
     "pipeline": check_pipeline,
     "vlm_pipeline": check_vlm_pipeline,
+    "semantic": check_semantic,
 }
 
 

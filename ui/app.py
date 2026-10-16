@@ -97,7 +97,10 @@ render_event_feed()
 # Chatbot
 # ---------------------------------------------------------------------------
 st.header("💬 Event Chatbot")
-semantic_search = st.checkbox("Semantic search (local Ollama)", value=False)
+semantic_search = st.checkbox(
+    "Semantic search (local Ollama)", value=False,
+    help="Ranks up to the 100 most recent events matching filters in your question; older events are not searched.",
+)
 question = st.text_input("Ask a question about stored events", placeholder="e.g. Show person down events from camera 1")
 
 if question:
