@@ -1,6 +1,10 @@
 # Live video event summarization system
 
-This repository is being built in phases for a 48-hour hackathon. Development, integration, and testing happen on one Windows laptop in this checkout. Phase 1 now includes sampled YOLO + ByteTrack detections, heuristic person-down and crowd events, SQLite storage, a read-only event chatbot, and a Streamlit dashboard. Run every phase gate before advancing; see [docs/phase-gates.md](docs/phase-gates.md).
+This repository is being built in phases for a 48-hour hackathon. Development, integration, and testing happen on one Windows laptop. The current prototype includes sampled YOLO + ByteTrack detections, heuristic person-down events, local SmolVLM captions, SQLite storage, a read-only event chatbot, and a Streamlit dashboard. Run every phase gate before advancing; see [docs/phase-gates.md](docs/phase-gates.md).
+
+## Phase 6 offline demo
+
+Use [the Phase 6 runbook](docs/phase6-runbook.md) for the clean-checkout rehearsal, three complete dashboard demos, backup recording, and submission checklist. Keep the local video, `yolov8n.pt`, the prepared `.venv`, and the cached SmolVLM model on the presentation laptop; Git does not contain those large local assets. The gate remains open until each manual check has direct evidence. The measured Phase 5 results and limitations are in [the evaluation report](docs/phase5-evaluation.md), with [slides](docs/phase5-review.pptx).
 
 ## Problem statement 3 - acceptance target
 
