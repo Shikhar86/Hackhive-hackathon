@@ -63,7 +63,7 @@ Run the entire presentation twice with a timer, including the backup-video fallb
 |---|---|---|
 | Fresh offline checkout | Clone path, commit, commands, no-network run result, real caption and keyframe | Complete on 2026-10-16; prepared local environment reused |
 | Three full demos | Three consecutive screen-observed results covering video, event, dashboard and chatbot | Complete on 2026-10-16 with the same reviewed clip |
-| Backup video | Path, duration, playback result, full-flow review | Pending |
+| Backup video | Path, duration, playback result, full-flow review | Complete on 2026-10-16; edited local backup |
 | Submission | Deadline and time zone, upload time, portal receipt, one-hour buffer | Pending |
 
 Run `python -m eval.phase_gate check 6` to see the current gate. Record human checks only after the evidence exists.
@@ -78,4 +78,8 @@ The isolated Streamlit dashboard then displayed the saved events and keyframes. 
 
 A local Git clone of `main` at commit `241fe1c` was made in `phase6_work/fresh_clone`. The laptop's local demo clip and YOLO weight were copied into the clone. The prepared `.venv` and `data/hf-cache` were reused, with `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`. The first pipeline run made two real-caption events with keyframes. Its dashboard displayed both events and keyframes, and the chatbot returned two rows for that camera. This establishes that a clean code clone runs offline with prepared dependencies and models; it does not establish that dependencies can be installed without a prebuilt environment.
 
-With the clone's Streamlit dashboard open and auto-refresh enabled, three further runs used camera IDs `phase6-demo-1`, `phase6-demo-2`, and `phase6-demo-3`. Each run exited successfully, produced two `person_down` events with real captions and JPEG keyframes, appeared in the dashboard without a browser reload, and returned two matching rows from a camera-filtered chatbot question. The feed count advanced from 2 to 4 to 6 to 8. The same reviewed clip was replayed each time, so this is a repeatability check rather than an accuracy measurement on unseen footage. `eval/gate_evidence.json` records both completed checks. Backup video playback and submission remain pending.
+With the clone's Streamlit dashboard open and auto-refresh enabled, three further runs used camera IDs `phase6-demo-1`, `phase6-demo-2`, and `phase6-demo-3`. Each run exited successfully, produced two `person_down` events with real captions and JPEG keyframes, appeared in the dashboard without a browser reload, and returned two matching rows from a camera-filtered chatbot question. The feed count advanced from 2 to 4 to 6 to 8. The same reviewed clip was replayed each time, so this is a repeatability check rather than an accuracy measurement on unseen footage. `eval/gate_evidence.json` records both completed checks. Backup video review is complete; portal submission remains pending.
+
+## Backup video review on 2026-10-16
+
+The local `Downloads/phase6-backup-demo.mp4` is a 60.5-second edited compilation of two user-provided screen recordings. It shows source playback, video analysis, saved person-down rows, keyframe images, and a camera-specific chatbot answer. The camera ID `uploaded-camera` was reused, so the chatbot shows four matching stored events rather than only the two newly created in the shown run. The file has H.264 video and AAC audio and decoded end to end without errors; its audio track is non-silent. The user should listen once on the presentation laptop before the demo. The backup file remains outside Git.
