@@ -4,3 +4,4 @@ lap>=0.5.12
 transformers==5.19.0
 accelerate==1.15.0
 streamlit>=1.40.0
+imageio-ffmpeg==0.6.0

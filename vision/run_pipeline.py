@@ -14,13 +14,14 @@ Real video::
 
 import argparse
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import cv2
 
 from core.db import insert_event
 from core.schema import Event
-from vision.detect_track import detect_and_track
+from vision.detect_track import TrackedFrame, detect_and_track
 from vision.event_rules import DetectedEvent, EventDetector
 from vision.vlm import summarize_image
 
@@ -76,6 +77,7 @@ def run_pipeline(
     crowd_threshold: int | None = None,
     use_vlm: bool = True,
     db_path=None,
+    on_frame: Callable[[TrackedFrame], None] | None = None,
 ) -> list[Event]:
     """Run the full detection → rules → DB pipeline on a video source.
 
@@ -98,6 +100,8 @@ def run_pipeline(
     )
     try:
         for count, tracked_frame in enumerate(frames_gen, start=1):
+            if on_frame is not None:
+                on_frame(tracked_frame)
             new_events = detector.process_frame(tracked_frame)
             for det in new_events:
                 kf_path = save_keyframe(det)

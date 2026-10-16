@@ -5,7 +5,9 @@ Run::
     streamlit run ui/app.py
 """
 
+import hashlib
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -16,6 +18,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import streamlit as st
+import imageio_ffmpeg
 
 from chatbot.chat import ask
 from core.db import get_events, init_db
@@ -30,31 +33,75 @@ st.set_page_config(page_title="Surveillance Dashboard", layout="wide")
 st.title("🔒 Surveillance Event Dashboard")
 st.caption("Review a clip, detect person-down events, and ask questions about saved results.")
 
+
+def save_upload(uploaded_file) -> Path:
+    """Store the original clip locally, reusing it across Streamlit reruns."""
+    upload_dir = ROOT / "data" / "videos" / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(uploaded_file.getbuffer()).hexdigest()
+    path = upload_dir / f"{digest}{Path(uploaded_file.name).suffix.lower()}"
+    if not path.is_file() or path.stat().st_size != uploaded_file.size:
+        uploaded_file.seek(0)
+        with path.open("wb") as output:
+            shutil.copyfileobj(uploaded_file, output)
+    return path
+
+
+def browser_preview(source_path: Path) -> Path:
+    """Make a widely playable H.264 Baseline preview with its audio."""
+    preview_path = source_path.with_name(f"{source_path.stem}_preview.mp4")
+    if preview_path.is_file() and preview_path.stat().st_size:
+        return preview_path
+    temporary_path = preview_path.with_name(f"{preview_path.stem}-{uuid4().hex}.mp4")
+    command = [
+        imageio_ffmpeg.get_ffmpeg_exe(), "-nostdin", "-hide_banner", "-loglevel", "error",
+        "-y", "-i", str(source_path), "-map", "0:v:0", "-map", "0:a?",
+        "-c:v", "libx264", "-profile:v", "baseline", "-pix_fmt", "yuv420p",
+        "-preset", "veryfast", "-crf", "25", "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart", str(temporary_path),
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True, timeout=300)
+        temporary_path.replace(preview_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return preview_path
+
 # ---------------------------------------------------------------------------
 # Local video upload and processing
 # ---------------------------------------------------------------------------
 st.header("Video analysis")
 uploaded_video = st.file_uploader("Choose a video", type=["mp4", "avi", "mov"])
+source_path = None
 
 if uploaded_video is not None:
-    suffix = Path(uploaded_video.name).suffix.lower()
-    if suffix == ".mp4":
-        st.video(uploaded_video)
-    else:
-        st.info("Browser playback may not support this format. The video can still be analyzed.")
+    source_path = save_upload(uploaded_video)
+    with st.spinner("Preparing a browser-compatible preview..."):
+        try:
+            preview_path = browser_preview(source_path)
+        except (OSError, subprocess.SubprocessError) as exc:
+            st.warning(f"Preview unavailable: {type(exc).__name__}. The original video can still be analyzed.")
+        else:
+            st.video(str(preview_path))
 
 camera_id = st.text_input("Camera name for this run", value="uploaded-camera")
-if st.button("Analyze video", disabled=uploaded_video is None or not camera_id.strip()):
-    upload_dir = ROOT / "data" / "videos" / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    source_path = upload_dir / f"{uuid4().hex}{suffix}"
-    uploaded_video.seek(0)
-    with source_path.open("wb") as output:
-        shutil.copyfileobj(uploaded_video, output)
+if st.button("Analyze video", disabled=source_path is None or not camera_id.strip()):
+    frame_slot = st.empty()
+    frame_count = [0]
+
+    def show_sampled_frame(frame):
+        frame_count[0] += 1
+        if frame_count[0] == 1 or frame_count[0] % 5 == 0:
+            frame_slot.image(
+                frame.image, channels="BGR", width="stretch",
+                caption=f"Analyzing video at {frame.video_time_s:.1f} seconds",
+            )
 
     with st.spinner("Detecting and tracking people, then describing event keyframes..."):
         try:
-            created = run_pipeline(str(source_path), camera_id=camera_id.strip())
+            created = run_pipeline(
+                str(source_path), camera_id=camera_id.strip(), on_frame=show_sampled_frame,
+            )
         except Exception as exc:
             st.error(f"Video analysis failed: {type(exc).__name__}: {exc}")
         else:
@@ -63,7 +110,7 @@ if st.button("Analyze video", disabled=uploaded_video is None or not camera_id.s
             else:
                 st.info("Analysis complete. No person-down event was detected in this video.")
 
-st.caption("Videos are processed on this laptop at 2 sampled frames per second. Uploaded files stay in the local data/videos folder.")
+st.caption("Videos are processed on this laptop at 2 sampled frames per second. The original and its playback copy stay in the local data/videos folder.")
 
 # ---------------------------------------------------------------------------
 # Sidebar filters

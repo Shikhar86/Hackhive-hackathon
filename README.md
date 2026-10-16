@@ -39,7 +39,7 @@ The video pipeline calls cached SmolVLM on each event keyframe by default. Use `
 
 Then open the local Streamlit address, usually `http://localhost:8501`, and check the feed, filters, keyframes, and chatbot.
 
-The dashboard also accepts an uploaded MP4, AVI, or MOV file. MP4 clips preview in the browser; AVI and MOV can be processed even if the browser cannot play them. Enter a camera name and choose **Analyze video** to run the same YOLO, ByteTrack, person-down, SmolVLM, and SQLite pipeline at the default 2 sampled frames per second. Results appear in the event feed below the upload area. The upload is saved locally under ignored `data/videos/uploads/`; it is not sent to a cloud service. A clip with no matching event will report zero events. Processing happens on the laptop and may take time for long clips.
+The dashboard accepts an uploaded MP4, AVI, or MOV file. It creates a browser-compatible H.264 Baseline playback copy with audio using the locally installed `imageio-ffmpeg` runtime; the original file remains the analysis input. Enter a camera name and choose **Analyze video** to run the same YOLO, ByteTrack, person-down, SmolVLM, and SQLite pipeline at the default 2 sampled frames per second. The dashboard shows sampled frames during analysis, then results in the event feed below. Both local files are kept under ignored `data/videos/uploads/`; they are not sent to a cloud service. A clip with no matching event will report zero events. Processing and preview conversion happen on the laptop and may take time for long clips.
 
 Run the Phase 1 gate with:
 
