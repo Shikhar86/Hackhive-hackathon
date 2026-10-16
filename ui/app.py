@@ -427,6 +427,10 @@ if st.session_state.get("camera_filter") not in camera_options:
     st.session_state["camera_filter"] = "All"
 selected_camera = st.sidebar.selectbox("Camera", camera_options, key="camera_filter")
 
+selected_review = st.sidebar.selectbox(
+    "Review status", ["All", "Unreviewed", "Confirmed", "False alarm"],
+)
+
 min_confidence = st.sidebar.slider("Minimum confidence", 0.0, 1.0, 0.0, 0.05)
 
 limit = st.sidebar.number_input("Max events", min_value=1, max_value=500, value=50)
@@ -440,6 +444,7 @@ auto_refresh = st.sidebar.checkbox("Auto-refresh (5 s)", value=True)
 def render_event_feed():
     st.header("Event Feed")
     all_events = get_events(limit=500)
+    review_map = get_review_map()
 
     filtered = all_events
     if selected_category != "All":
@@ -448,6 +453,11 @@ def render_event_feed():
         filtered = [event for event in filtered if event["camera_id"] == selected_camera]
     if min_confidence > 0:
         filtered = [event for event in filtered if event["confidence"] >= min_confidence]
+    if selected_review != "All":
+        filtered = [
+            event for event in filtered
+            if review_map.get(event["id"], "Unreviewed") == selected_review
+        ]
     filtered = filtered[:limit]
 
     if not filtered:
@@ -455,7 +465,6 @@ def render_event_feed():
         return
 
     st.write(f"Showing **{len(filtered)}** event(s). Select a timeline card to inspect an incident.")
-    review_map = get_review_map()
     table_data = [
         {
             "Time (local)": display_time(event["timestamp"]),
