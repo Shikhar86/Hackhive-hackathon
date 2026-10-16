@@ -69,5 +69,6 @@ Replayed the cached YOLO + ByteTrack tracks at 2 FPS:
 | `v001_converted 3.avi` | 1 alert | 0 alerts |
 | `v011_converted 3.avi` | 1 alert | 0 alerts |
 | `v003_converted 3.avi` | 0 alerts | 0 alerts |
+| Labeled 30-second fall demo | 2 alerts (6.5, 9.0 s) | 1 alert (11.5 s) |
 
-The experiment substantially lowers alerts on this one normal clip but misses all candidate fall clips in this small replay. It is not a usable replacement and was not enabled by default. The remaining shop alert is at 193.0 s. This does not pass the Phase 3 false-alarm criterion because the default implementation still produces nine reviewed false alerts; Gate 3 remains open. Track continuity, sampling rate, camera view, and confirmed segment labels need to be improved before this motion rule can be judged fairly.
+The experiment substantially lowers alerts on this one normal clip and detects a transition in the labeled 30-second demo, but produces one alert there where the current rule produced two. It misses the tentative montage falls and the two short clips where people are already down before tracking establishes an upright baseline. It is not a usable replacement and was not enabled by default. The remaining shop alert is at 193.0 s. This does not pass the Phase 3 false-alarm criterion because the default implementation still produces nine reviewed false alerts; Gate 3 remains open. Track continuity, sampling rate, camera view, and confirmed segment labels need to be improved before this motion rule can be judged fairly.
