@@ -24,11 +24,12 @@ import cv2
 
 from chatbot.chat import ask
 from core.db import (
-    get_event, get_event_evidence, get_events, get_review, get_review_map,
-    init_db, set_review,
+    get_event, get_event_evidence, get_events, get_operator_flags,
+    get_review, get_review_map, init_db, insert_operator_flag, set_review,
 )
 from vision.run_pipeline import run_pipeline
 from vision.orientation import suggest_video_orientation
+from ui.novelty import footage_quality, incident_report_html
 
 init_db()
 
@@ -236,6 +237,11 @@ def cached_orientation_hint(source: str) -> str:
     return suggest_video_orientation(source)
 
 
+@st.cache_data(show_spinner=False)
+def cached_footage_quality(source: str) -> dict:
+    return footage_quality(Path(source))
+
+
 def browser_preview(source_path: Path, rotation: str = "As shown") -> Path:
     """Make a browser-compatible copy in the operator-selected orientation."""
     if rotation not in VIDEO_ROTATIONS:
@@ -412,6 +418,15 @@ with video_preview:
                 st.warning(f"Preview unavailable: {type(exc).__name__}. Re-select the file or try a shorter clip before analysis.")
             else:
                 st.video(str(preview_path))
+                try:
+                    quality = cached_footage_quality(str(preview_path))
+                    if quality["warnings"]:
+                        for warning in quality["warnings"]:
+                            st.warning(warning)
+                    else:
+                        st.caption("Quick footage check: no low-light or blur warning. This does not guarantee detection accuracy.")
+                except (OSError, cv2.error) as exc:
+                    st.caption(f"Footage quality check unavailable ({type(exc).__name__}).")
     else:
         st.markdown(
             '<div class="ui-preview-empty"><b>◎</b><strong>Your footage appears here</strong>'
@@ -423,9 +438,16 @@ if analyze_clicked:
     frame_slot = st.empty()
     progress_slot = st.progress(0, text="Preparing video analysis...")
     frame_count = [0]
+    person_observations = [0]
+    seen_track_ids = set()
 
     def show_sampled_frame(frame):
         frame_count[0] += 1
+        for track in frame.tracks:
+            if track.get("class_name") == "person":
+                person_observations[0] += 1
+                if track.get("track_id") is not None:
+                    seen_track_ids.add(track["track_id"])
         if frame_count[0] == 1 or frame_count[0] % 5 == 0:
             frame_slot.image(
                 frame.image, channels="BGR", width="stretch",
@@ -457,6 +479,8 @@ if analyze_clicked:
             if not created and detection_mode.startswith("Automatic"):
                 progress_slot.progress(0, text="Checking experimental low-posture review candidates...")
                 frame_count[0] = 0
+                person_observations[0] = 0
+                seen_track_ids.clear()
                 created = analyze_once(True)
                 mode_used = "Motion-sensitive (automatic review fallback)"
         except Exception as exc:
@@ -469,6 +493,11 @@ if analyze_clicked:
                 "video_name": uploaded_video.name,
                 "rotation": rotation,
                 "detection_mode": mode_used,
+                "source_path": str(analysis_source),
+                "duration_s": video_duration(analysis_source),
+                "sampled_frames": frame_count[0],
+                "person_observations": person_observations[0],
+                "tracked_people": len(seen_track_ids),
                 "run_signature": run_signature,
                 "events": [event.to_dict() for event in created],
             }
@@ -498,6 +527,15 @@ if latest_run:
         f"{latest_run.get('detection_mode', 'mode unknown')}"
     )
     st.metric("New events", len(latest_run["events"]))
+    st.subheader("Analysis coverage")
+    st.caption(
+        f"Clip length: {display_video_time(latest_run.get('duration_s'))} · "
+        f"Frames sampled: {latest_run.get('sampled_frames', 0)} · "
+        f"Person observations: {latest_run.get('person_observations', 0)} · "
+        f"Distinct ByteTrack IDs: {latest_run.get('tracked_people', 0)} · "
+        f"AI review candidates: {len(latest_run['events'])}"
+    )
+    st.caption("Track IDs are estimates. A zero-event result does not mean the video is incident-free.")
     for event in latest_run["events"]:
         with st.container(border=True):
             picture, details = st.columns([1, 2])
@@ -517,6 +555,69 @@ if latest_run:
         st.session_state["chat_question"] = (
             f"Show person down events from camera {latest_run['camera_id']}"
         )
+
+    st.subheader("Flag a missed moment")
+    st.caption("This creates an operator flag, not an AI detection. It stays separate from the chatbot's detected-event feed.")
+    if not latest_run.get("source_path"):
+        st.info("Analyze the clip again to flag a video moment.")
+    else:
+        with st.form("operator_flag_form", clear_on_submit=True):
+            flag_time = st.number_input(
+                "Video time in seconds", min_value=0.0,
+                max_value=float(latest_run["duration_s"] or 0.0) if latest_run.get("duration_s") else None,
+                value=0.0, step=0.5,
+            )
+            flag_note = st.text_area("What did you observe?", placeholder="Describe the moment you want a person to review.")
+            save_flag = st.form_submit_button("Save operator flag")
+        if save_flag:
+            flag_source = Path(latest_run["source_path"])
+            if not flag_note.strip():
+                st.error("Add a note describing the observed moment.")
+            elif not flag_source.is_file():
+                st.error("The analyzed video is no longer on this laptop.")
+            else:
+                image = video_frame_at(flag_source, flag_time)
+                if image is None:
+                    st.error("No frame was available at that time. Choose a moment within the clip.")
+                else:
+                    keyframe_dir = ROOT / "data" / "keyframes"
+                    keyframe_dir.mkdir(parents=True, exist_ok=True)
+                    keyframe_path = keyframe_dir / f"operator_{uuid4().hex}.jpg"
+                    if not cv2.imwrite(str(keyframe_path), cv2.cvtColor(image, cv2.COLOR_RGB2BGR)):
+                        st.error("Could not save the operator keyframe.")
+                    else:
+                        insert_operator_flag(
+                            latest_run["camera_id"], str(flag_source), flag_time,
+                            flag_note, str(keyframe_path.relative_to(ROOT)),
+                        )
+                        st.success("Operator flag saved separately from AI detections.")
+                        st.rerun()
+
+operator_flags = get_operator_flags(limit=50)
+if operator_flags:
+    st.subheader("Operator-flagged moments")
+    st.caption("These moments were entered by a person. They are not model detections or detector accuracy results.")
+    for flag in operator_flags:
+        with st.expander(
+            f"Operator flag · {flag['camera_id']} · {display_video_time(flag['video_time_s'])}"
+        ):
+            flag_image = ROOT / flag["keyframe_path"] if flag["keyframe_path"] else None
+            if flag_image and flag_image.is_file():
+                st.image(str(flag_image), width="stretch")
+            st.write(flag["note"])
+            st.caption(f"Saved {display_time(flag['created_at'])}")
+            st.download_button(
+                "Download operator report", file_name=f"operator-incident-{flag['id'][:8]}.html",
+                mime="text/html", key=f"report_operator_{flag['id']}",
+                data=incident_report_html(
+                    label="OPERATOR FLAG — NOT AN AI DETECTION",
+                    camera_id=flag["camera_id"], created_at=display_time(flag["created_at"]),
+                    video_time=display_video_time(flag["video_time_s"]),
+                    summary=flag["note"], reason="A person selected this video moment for review.",
+                    review_status="Operator flagged", review_note=flag["note"],
+                    keyframe_path=flag_image,
+                ),
+            )
 
 # ---------------------------------------------------------------------------
 # Sidebar filters
@@ -722,6 +823,20 @@ if selected_event:
             set_review(selected_event_id, status, note)
             st.success("Review saved on this laptop.")
             st.rerun()
+
+    st.download_button(
+        "Download incident report", file_name=f"ai-incident-{selected_event_id[:8]}.html",
+        mime="text/html", key=f"report_ai_{selected_event_id}",
+        data=incident_report_html(
+            label="AI REVIEW CANDIDATE", camera_id=selected_event["camera_id"],
+            created_at=display_time(selected_event["timestamp"]), video_time=video_position,
+            summary=selected_event["summary"],
+            reason=evidence["rule_reason"] if evidence and evidence["rule_reason"] else "Detailed rule evidence unavailable.",
+            review_status=review["status"], review_note=review["note"],
+            keyframe_path=keyframe_path, detector_score=selected_event["confidence"],
+        ),
+        help="Downloads one self-contained HTML file. Open it in a browser or print it to PDF.",
+    )
 
 # ---------------------------------------------------------------------------
 # Chatbot

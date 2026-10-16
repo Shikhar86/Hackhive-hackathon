@@ -3,6 +3,7 @@ import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from core.schema import Event
 
@@ -55,6 +56,18 @@ def init_db(db_path=DB_PATH):
                 updated_at TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS operator_flags (
+                id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                camera_id TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                video_time_s REAL NOT NULL,
+                note TEXT NOT NULL,
+                keyframe_path TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_operator_flags_time ON operator_flags(created_at)")
 
 
 def insert_event(event: Event, db_path=DB_PATH):
@@ -149,3 +162,43 @@ def set_review(event_id: str, status: str, note: str, db_path=DB_PATH) -> None:
                 note = excluded.note,
                 updated_at = excluded.updated_at
         """, (event_id, status, note.strip(), datetime.now(timezone.utc).isoformat()))
+
+
+def insert_operator_flag(
+    camera_id: str, source_path: str, video_time_s: float,
+    note: str, keyframe_path: str | None, db_path=DB_PATH,
+) -> dict:
+    """Keep operator observations separate from model-generated events."""
+    if not camera_id.strip() or not source_path.strip() or not note.strip():
+        raise ValueError("Camera, source video, and operator note are required")
+    if not 0 <= video_time_s < float("inf"):
+        raise ValueError("Video time must be a finite nonnegative number")
+    flag = {
+        "id": str(uuid4()),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "camera_id": camera_id.strip(),
+        "source_path": source_path,
+        "video_time_s": float(video_time_s),
+        "note": note.strip(),
+        "keyframe_path": keyframe_path,
+    }
+    init_db(db_path)
+    with closing(connect(db_path)) as conn, conn:
+        conn.execute("""
+            INSERT INTO operator_flags
+            (id, created_at, camera_id, source_path, video_time_s, note, keyframe_path)
+            VALUES (:id, :created_at, :camera_id, :source_path, :video_time_s, :note, :keyframe_path)
+        """, flag)
+    return flag
+
+
+def get_operator_flags(db_path=DB_PATH, limit=50) -> list[dict]:
+    if limit < 1:
+        raise ValueError("Limit must be positive")
+    init_db(db_path)
+    with closing(connect(db_path)) as conn:
+        rows = conn.execute("""
+            SELECT id, created_at, camera_id, source_path, video_time_s, note, keyframe_path
+            FROM operator_flags ORDER BY created_at DESC, id DESC LIMIT ?
+        """, (limit,)).fetchall()
+    return [dict(row) for row in rows]
