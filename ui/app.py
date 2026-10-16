@@ -9,6 +9,7 @@ import hashlib
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -19,6 +20,7 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st
 import imageio_ffmpeg
+import cv2
 
 from chatbot.chat import ask
 from core.db import get_events, init_db
@@ -29,9 +31,162 @@ init_db()
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
-st.set_page_config(page_title="Surveillance Dashboard", layout="wide")
-st.title("🔒 Surveillance Event Dashboard")
-st.caption("Review a clip, detect person-down events, and ask questions about saved results.")
+st.set_page_config(
+    page_title="Surveillance Intelligence", page_icon="✦", layout="wide",
+    initial_sidebar_state="expanded",
+)
+st.markdown(
+    """
+    <style>
+    :root { color-scheme: dark; }
+    .stApp {
+        background:
+            radial-gradient(circle at 71% 0%, rgba(143, 99, 136, .25), transparent 34rem),
+            radial-gradient(circle at 8% 82%, rgba(111, 68, 109, .15), transparent 30rem),
+            #09080c;
+        color: #f8f3f8;
+        font-family: "Segoe UI", Inter, sans-serif;
+    }
+    [data-testid="stAppViewContainer"], [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stMainBlockContainer"] {
+        max-width: 1450px; padding: 2.1rem 3.2rem 5rem;
+    }
+    [data-testid="stSidebar"] {
+        background: linear-gradient(160deg, #111015, #09080b 74%);
+        border-right: 1px solid #4c3a4b;
+    }
+    [data-testid="stSidebarContent"] { padding: 1.5rem 1rem 2rem; }
+    [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #f7eef6; }
+    h1, h2, h3, p, label { letter-spacing: -.015em; }
+    h2, h3 { color: #f8f3f8 !important; }
+    [data-testid="stMarkdownContainer"] a { color: #e5b9dd; }
+    .ui-hero {
+        position: relative; overflow: hidden; display: flex; align-items: center;
+        justify-content: space-between; gap: 2rem; padding: 2.25rem 2.5rem;
+        border: 1px solid rgba(213, 169, 207, .28); border-radius: 27px;
+        background: linear-gradient(110deg, #302632, #211a27 55%, #100e14);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, .28), inset 0 1px rgba(255,255,255,.09);
+        margin: .2rem 0 1.7rem;
+    }
+    .ui-hero::after {
+        content: ""; position: absolute; width: 24rem; height: 24rem;
+        right: 4%; top: -12rem; pointer-events: none;
+        background: radial-gradient(circle, rgba(226, 160, 214, .23), transparent 65%);
+    }
+    .ui-hero-copy, .ui-hero-status { position: relative; z-index: 1; }
+    .ui-eyebrow { font-size: .7rem; letter-spacing: .2em; font-weight: 700; color: #dfb7d7; }
+    .ui-hero h1 { font-size: clamp(2rem, 3vw, 3.2rem); line-height: 1.09; margin: .65rem 0 .7rem; }
+    .ui-hero h1 em { font-style: normal; color: #e7b7db; }
+    .ui-hero p { margin: 0; color: #d9cbd6; font-size: 1.03rem; }
+    .ui-hero-status {
+        white-space: nowrap; align-self: flex-start; padding: .58rem .9rem;
+        border: 1px solid #886c86; border-radius: 999px;
+        background: rgba(11, 9, 13, .55); color: #f0deeb;
+        font-size: .75rem; font-weight: 650; letter-spacing: .07em;
+    }
+    .ui-hero-status b { color: #70d6a1; margin-right: .4rem; }
+    .ui-steps { display: flex; flex-wrap: wrap; gap: .55rem; margin: 0 0 1.15rem; }
+    .ui-steps span {
+        border: 1px solid #695367; border-radius: 999px; background: #161219;
+        padding: .5rem .9rem; color: #ddcbd9; font-size: .8rem;
+    }
+    .ui-steps span:first-child { background: linear-gradient(110deg, #694964, #402d43); color: #fff; }
+    .ui-metric {
+        min-height: 118px; padding: 1.25rem 1.4rem; border-radius: 22px;
+        background: linear-gradient(135deg, #1c1720, #0e0c11);
+        border: 1px solid #544253;
+        box-shadow: inset 0 1px rgba(255,255,255,.06), 0 14px 40px rgba(0,0,0,.2);
+    }
+    .ui-metric.accent { background: radial-gradient(circle at 90% 5%, #5c4059, #211922 62%, #151118); }
+    .ui-metric-label { color: #d5c2d2; font-size: .82rem; }
+    .ui-metric-value { margin-top: .9rem; color: #fff; font-size: 2rem; font-weight: 700; line-height: 1; }
+    .ui-metric-foot { margin-top: .45rem; color: #a997a7; font-size: .72rem; }
+    .ui-preview-empty {
+        height: 326px; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; text-align: center; gap: .55rem;
+        border: 1px dashed #6b5268; border-radius: 20px;
+        background: radial-gradient(circle at 50% 20%, #2a1e2b, #100e13 65%);
+        color: #bda9ba;
+    }
+    .ui-preview-empty b { font-size: 2rem; font-weight: 400; color: #e3b8dc; }
+    .ui-preview-empty strong { color: #f4e9f1; font-size: 1rem; }
+    .ui-preview-empty small { color: #ac99a9; }
+    .ui-brand { padding: .8rem .6rem 1.4rem; border-bottom: 1px solid #3c303d; margin-bottom: 1.2rem; }
+    .ui-brand strong { color: #fff; letter-spacing: .07em; font-size: 1.02rem; }
+    .ui-brand strong span { color: #e5a9d9; }
+    .ui-brand small { display: block; margin-top: .45rem; color: #a994a9; }
+    .ui-side-label { color: #bb9eb9; font-size: .68rem; font-weight: 700; letter-spacing: .18em; margin: .5rem .2rem .8rem; }
+    [data-testid="stFileUploaderDropzone"], [data-testid="stVideo"],
+    [data-testid="stDataFrame"], [data-testid="stVerticalBlockBorderWrapper"] {
+        background: #131016; border: 1px solid #5a4558 !important; border-radius: 20px !important;
+        overflow: hidden;
+    }
+    [data-testid="stFileUploaderDropzone"] { border-style: dashed !important; padding: 1rem; }
+    [data-testid="stTextInputRootElement"], [data-testid="stSelectbox"] > div > div,
+    [data-testid="stNumberInput"] input {
+        background: #17131b !important; border: 1px solid #674f64 !important;
+        border-radius: 13px !important; color: #fff !important;
+    }
+    [data-testid="stTextInputField"] { color: #fff !important; }
+    [data-testid="stButton"] button, [data-testid="stFormSubmitButton"] button {
+        border: 1px solid #b188ab; border-radius: 999px; color: #fff;
+        background: linear-gradient(115deg, #674b64, #a36f9b); font-weight: 650;
+        box-shadow: 0 7px 24px rgba(156, 103, 148, .22);
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+    [data-testid="stButton"] button:hover, [data-testid="stFormSubmitButton"] button:hover {
+        border-color: #e4b7da; color: #fff; transform: translateY(-1px);
+        box-shadow: 0 9px 30px rgba(193, 128, 182, .37);
+    }
+    [data-testid="stButton"] button:disabled { opacity: .45; transform: none; box-shadow: none; }
+    [data-testid="stAlert"] { border-radius: 16px; }
+    [data-testid="stMetric"] { padding: 1rem; border-radius: 16px; background: #17121a; border: 1px solid #5a4558; }
+    [data-testid="stProgressBar"] > div { background: #211822; }
+    [data-testid="stProgressBar"] > div > div { background: #d4a2ca; }
+    [data-testid="stSlider"] [data-rac][style*="position: absolute"] { background: #d4a2ca !important; }
+    [data-testid="stSliderThumbValue"], [data-testid="stSliderThumbValue"] p { color: #d4a2ca !important; }
+    [data-testid="stCheckbox"] input { accent-color: #d4a2ca; }
+    @media (max-width: 850px) {
+        [data-testid="stMainBlockContainer"] { padding: 1.4rem 1rem 3rem; }
+        .ui-hero { flex-direction: column; align-items: flex-start; padding: 1.55rem; }
+        .ui-hero h1 { font-size: 2.1rem; }
+        .ui-hero-status { align-self: flex-start; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.markdown(
+    """
+    <div class="ui-hero">
+      <div class="ui-hero-copy">
+        <div class="ui-eyebrow">HONEYWELL HACKATHON · PROBLEM 3</div>
+        <h1>Surveillance <em>Intelligence</em></h1>
+        <p>Analyze footage. Review possible incidents. Ask questions about saved events.</p>
+      </div>
+      <div class="ui-hero-status"><b>●</b> ON-DEVICE PROTOTYPE</div>
+    </div>
+    <div class="ui-steps"><span>01 &nbsp; Analyze video</span><span>02 &nbsp; Review events</span><span>03 &nbsp; Ask the assistant</span></div>
+    """,
+    unsafe_allow_html=True,
+)
+overview_events = get_events(limit=500)
+overview_cameras = len({event["camera_id"] for event in overview_events})
+overview_count = f"{len(overview_events)}+" if len(overview_events) == 500 else str(len(overview_events))
+metric_columns = st.columns(3)
+for column, css_class, label, value, foot in zip(
+    metric_columns,
+    ("accent", "", ""),
+    ("Recent events", "Cameras with events", "Analysis sampling"),
+    (overview_count, str(overview_cameras), "2 FPS"),
+    ("Latest 500 stored events", "From saved analyses", "Frames checked per second of video"),
+):
+    with column:
+        st.markdown(
+            f'<div class="ui-metric {css_class}"><div class="ui-metric-label">{label}</div>'
+            f'<div class="ui-metric-value">{value}</div><div class="ui-metric-foot">{foot}</div></div>',
+            unsafe_allow_html=True,
+        )
 
 
 def save_upload(uploaded_file) -> Path:
@@ -67,26 +222,76 @@ def browser_preview(source_path: Path) -> Path:
         temporary_path.unlink(missing_ok=True)
     return preview_path
 
+
+def suggest_camera_name() -> str:
+    """Choose a short camera name that has not been used in recent events."""
+    existing = {event["camera_id"] for event in get_events(limit=500)}
+    number = 1
+    while f"demo-{number}" in existing:
+        number += 1
+    return f"demo-{number}"
+
+
+def video_duration(source_path: Path) -> float | None:
+    """Read video length for the progress bar without decoding the clip."""
+    capture = cv2.VideoCapture(str(source_path))
+    try:
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        frame_count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        return frame_count / fps if fps > 0 and frame_count > 0 else None
+    finally:
+        capture.release()
+
+
+def display_time(timestamp: str) -> str:
+    """Show stored UTC timestamps in the laptop's local time zone."""
+    try:
+        return datetime.fromisoformat(timestamp).astimezone().strftime("%d %b %Y · %I:%M %p")
+    except ValueError:
+        return timestamp
+
 # ---------------------------------------------------------------------------
 # Local video upload and processing
 # ---------------------------------------------------------------------------
 st.header("Video analysis")
-uploaded_video = st.file_uploader("Choose a video", type=["mp4", "avi", "mov"])
-source_path = None
+video_controls, video_preview = st.columns([1, 1.18], gap="large")
+with video_controls:
+    st.caption("Upload a clip and give this analysis a unique camera name.")
+    uploaded_video = st.file_uploader("Choose a video", type=["mp4", "avi", "mov"])
+    source_path = save_upload(uploaded_video) if uploaded_video is not None else None
+    clip_duration = video_duration(source_path) if source_path else None
 
-if uploaded_video is not None:
-    source_path = save_upload(uploaded_video)
-    with st.spinner("Preparing a browser-compatible preview..."):
-        try:
-            preview_path = browser_preview(source_path)
-        except (OSError, subprocess.SubprocessError) as exc:
-            st.warning(f"Preview unavailable: {type(exc).__name__}. The original video can still be analyzed.")
-        else:
-            st.video(str(preview_path))
+    if "camera_name" not in st.session_state:
+        st.session_state["camera_name"] = suggest_camera_name()
+    if st.button("Use a new camera name", help="Keep each analysis separate from earlier results"):
+        st.session_state["camera_name"] = suggest_camera_name()
+    camera_id = st.text_input("Camera name for this run", key="camera_name")
+    st.caption("A new name keeps this run separate from earlier results.")
+    analyze_clicked = st.button(
+        "Analyze video", type="primary", use_container_width=True,
+        disabled=source_path is None or not camera_id.strip(),
+    )
 
-camera_id = st.text_input("Camera name for this run", value="uploaded-camera")
-if st.button("Analyze video", disabled=source_path is None or not camera_id.strip()):
+with video_preview:
+    st.caption("VIDEO PREVIEW")
+    if source_path:
+        with st.spinner("Preparing a browser-compatible preview..."):
+            try:
+                preview_path = browser_preview(source_path)
+            except (OSError, subprocess.SubprocessError) as exc:
+                st.warning(f"Preview unavailable: {type(exc).__name__}. The original video can still be analyzed.")
+            else:
+                st.video(str(preview_path))
+    else:
+        st.markdown(
+            '<div class="ui-preview-empty"><b>◎</b><strong>Your footage appears here</strong>'
+            '<small>Choose an MP4, AVI, or MOV file to preview it.</small></div>',
+            unsafe_allow_html=True,
+        )
+
+if analyze_clicked:
     frame_slot = st.empty()
+    progress_slot = st.progress(0, text="Preparing video analysis...")
     frame_count = [0]
 
     def show_sampled_frame(frame):
@@ -96,6 +301,12 @@ if st.button("Analyze video", disabled=source_path is None or not camera_id.stri
                 frame.image, channels="BGR", width="stretch",
                 caption=f"Analyzing video at {frame.video_time_s:.1f} seconds",
             )
+            if clip_duration:
+                percentage = min(95, int(frame.video_time_s / clip_duration * 100))
+                progress_slot.progress(
+                    percentage,
+                    text=f"Analyzing {frame.video_time_s:.1f} of {clip_duration:.1f} seconds",
+                )
 
     with st.spinner("Detecting and tracking people, then describing event keyframes..."):
         try:
@@ -103,26 +314,68 @@ if st.button("Analyze video", disabled=source_path is None or not camera_id.stri
                 str(source_path), camera_id=camera_id.strip(), on_frame=show_sampled_frame,
             )
         except Exception as exc:
+            progress_slot.empty()
             st.error(f"Video analysis failed: {type(exc).__name__}: {exc}")
         else:
+            progress_slot.progress(100, text="Analysis complete")
+            st.session_state["latest_run"] = {
+                "camera_id": camera_id.strip(),
+                "video_name": uploaded_video.name,
+                "events": [event.to_dict() for event in created],
+            }
             if created:
+                st.session_state["camera_filter"] = camera_id.strip()
+                st.session_state["chat_question"] = (
+                    f"Show person down events from camera {camera_id.strip()}"
+                )
                 st.success(f"Analysis complete: {len(created)} event(s) saved. See the feed below.")
             else:
                 st.info("Analysis complete. No person-down event was detected in this video.")
 
 st.caption("Videos are processed on this laptop at 2 sampled frames per second. The original and its playback copy stay in the local data/videos folder.")
 
+latest_run = st.session_state.get("latest_run")
+if latest_run:
+    st.subheader("Results from the latest analysis")
+    st.caption(f"{latest_run['video_name']} · camera {latest_run['camera_id']}")
+    st.metric("New events", len(latest_run["events"]))
+    for event in latest_run["events"]:
+        with st.container(border=True):
+            picture, details = st.columns([1, 2])
+            with picture:
+                keyframe = ROOT / event["keyframe_path"] if event["keyframe_path"] else None
+                if keyframe and keyframe.is_file():
+                    st.image(str(keyframe), width="stretch")
+            with details:
+                st.write(f"**{event['category'].replace('_', ' ').title()}** — {event['summary']}")
+                st.caption(
+                    f"Score {event['confidence']:.0%} · Saved {display_time(event['timestamp'])}"
+                )
+    if latest_run["events"] and st.button("Ask the chatbot about this run"):
+        st.session_state["chat_question"] = (
+            f"Show person down events from camera {latest_run['camera_id']}"
+        )
+
 # ---------------------------------------------------------------------------
 # Sidebar filters
 # ---------------------------------------------------------------------------
+st.sidebar.markdown(
+    '<div class="ui-brand"><strong>✦ <span>HONEYWELL</span> VISION</strong>'
+    '<small>Incident review workspace</small></div>'
+    '<div class="ui-side-label">EVENT CONTROLS</div>',
+    unsafe_allow_html=True,
+)
 st.sidebar.header("Filters")
+st.sidebar.caption("The current analysis detects possible person-down events.")
 
 category_options = ["All", "person_down", "fighting", "tailgating", "crowd", "suspicious"]
 selected_category = st.sidebar.selectbox("Category", category_options)
 
 existing_events = get_events(limit=500)
 camera_options = ["All", *sorted({event["camera_id"] for event in existing_events})]
-selected_camera = st.sidebar.selectbox("Camera", camera_options)
+if st.session_state.get("camera_filter") not in camera_options:
+    st.session_state["camera_filter"] = "All"
+selected_camera = st.sidebar.selectbox("Camera", camera_options, key="camera_filter")
 
 min_confidence = st.sidebar.slider("Minimum confidence", 0.0, 1.0, 0.0, 0.05)
 
@@ -154,9 +407,9 @@ def render_event_feed():
     st.write(f"Showing **{len(filtered)}** event(s)")
     table_data = [
         {
-            "Time": event["timestamp"],
+            "Time (local)": display_time(event["timestamp"]),
             "Camera": event["camera_id"],
-            "Category": event["category"],
+            "Category": event["category"].replace("_", " ").title(),
             "Confidence": f"{event['confidence']:.0%}",
             "Summary": event["summary"][:80],
         }
@@ -167,6 +420,7 @@ def render_event_feed():
     keyframe_events = [event for event in filtered if event.get("keyframe_path")]
     if keyframe_events:
         st.header("Keyframes")
+        st.caption("Hover over a keyframe and select the expand icon to see it larger.")
         cols = st.columns(min(len(keyframe_events), 4))
         for idx, event in enumerate(keyframe_events[:12]):
             col = cols[idx % len(cols)]
@@ -187,7 +441,11 @@ semantic_search = st.checkbox(
     "Semantic search (local Ollama)", value=False,
     help="Ranks up to the 100 most recent events matching filters in your question; older events are not searched.",
 )
-question = st.text_input("Ask a question about stored events", placeholder="e.g. Show person down events from camera 1")
+question = st.text_input(
+    "Ask a question about stored events",
+    placeholder="e.g. Show person down events from camera demo-1",
+    key="chat_question",
+)
 
 if question:
     try:
@@ -196,9 +454,9 @@ if question:
         if rows:
             chat_table = [
                 {
-                    "Time": r["timestamp"],
+                    "Time (local)": display_time(r["timestamp"]),
                     "Camera": r["camera_id"],
-                    "Category": r["category"],
+                    "Category": r["category"].replace("_", " ").title(),
                     "Confidence": f"{r['confidence']:.0%}",
                     "Summary": r["summary"][:80],
                 }
