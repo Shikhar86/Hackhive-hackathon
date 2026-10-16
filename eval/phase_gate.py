@@ -43,7 +43,7 @@ GATES = {
         },
     },
     2: {
-        "auto": {},
+        "auto": {"vlm_pipeline": "Event pipeline uses a mocked VLM caption in stored summaries"},
         "manual": {
             "event": "Real-time clip creates correct event, key frame, and VLM summary",
             "dashboard": "Event appears in dashboard without manual reload",
@@ -134,12 +134,20 @@ def check_pipeline():
         main()
 
 
+def check_vlm_pipeline():
+    from eval.test_pipeline import main
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        main()
+
+
 AUTO_CHECKS = {
     "foundation": check_foundation,
     "opencv": check_opencv,
     "ingest": check_ingest,
     "event_rules": check_event_rules,
     "pipeline": check_pipeline,
+    "vlm_pipeline": check_vlm_pipeline,
 }
 
 

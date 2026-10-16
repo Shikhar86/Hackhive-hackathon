@@ -31,13 +31,15 @@ Run the full video-to-event pipeline and open the dashboard in another PowerShel
 .\.venv\Scripts\python.exe -m streamlit run ui/app.py
 ```
 
+The video pipeline calls cached SmolVLM on each event keyframe by default. Use `--no-vlm` only for debugging the vision rules without captions.
+
 Then open the local Streamlit address, usually `http://localhost:8501`, and check the feed, filters, keyframes, and chatbot. Run the Phase 1 gate with:
 
 ```powershell
 .\.venv\Scripts\python.exe -m eval.phase_gate check 1
 ```
 
-Current limitations: `person_down` and `crowd` use geometric/count heuristics; `fighting`, `tailgating`, and `suspicious` are not implemented in the vision pipeline. A vision-language model summary is also not yet connected. See `eval/gate_evidence.json` for the measured Phase 1 results.
+Current limitations: `person_down` and `crowd` use geometric/count heuristics; `fighting`, `tailgating`, and `suspicious` are not implemented in the vision pipeline. SmolVLM captions the event keyframe but does not independently validate the category. See `eval/gate_evidence.json` for the measured phase results.
 
 ## Frozen event contract
 

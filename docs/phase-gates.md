@@ -37,7 +37,7 @@ Record clip IDs, question results, commands, and the merge commit in the gate ev
 
 ## Gate 2 - first end-to-end path, hours 15-24
 
-Replay one labeled clip at its original rate. Require a correct person-down event in SQLite with a key frame and VLM summary; observe the instant row followed by the summary in the dashboard without manual reload; query it through the chatbot. Run this on the main laptop from one environment. If the gate is still open at hour 24, stop new features and fix this path.
+Run `python -m eval.phase_gate check 2` for the automated mocked-VLM-to-database contract check. Then replay one labeled clip at its original rate. Require a correct person-down event in SQLite with a key frame and real SmolVLM summary; observe the row in the dashboard and query it through the chatbot. Confirm the model is loaded from the local cache. Run this on the main laptop from one environment. If the gate is still open at hour 24, stop new features and fix this path.
 
 ## Gate 3 - wider categories, hours 24-32
 

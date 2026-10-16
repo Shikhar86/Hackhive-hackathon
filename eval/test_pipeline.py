@@ -35,6 +35,7 @@ def make_frame(index: int, fallen: bool = False, crowded: bool = True) -> Tracke
         video_time_s=index / 2,
         captured_at_utc=datetime.now(timezone.utc).isoformat(),
         tracks=tracks,
+        image=np.zeros((64, 64, 3), dtype=np.uint8),
     )
 
 
@@ -69,6 +70,7 @@ def main():
         with (
             patch("vision.run_pipeline.detect_and_track", return_value=fake_frames),
             patch("vision.run_pipeline.save_keyframe", return_value="data/keyframes/test.jpg"),
+            patch("vision.run_pipeline.summarize_image", return_value="test factual caption"),
         ):
             events = run_pipeline("unused-source", db_path=db_path)
 
@@ -78,6 +80,7 @@ def main():
         assert len(rows) == 2
         assert all(row["camera_id"] == "camera-test" for row in rows)
         assert all(row["keyframe_path"] == "data/keyframes/test.jpg" for row in rows)
+        assert all(row["summary"].startswith("Possible ") and "test factual caption" in row["summary"] for row in rows)
         assert all(set(row) == {"id", "timestamp", "camera_id", "category", "confidence", "summary", "keyframe_path"} for row in rows)
         print("PASS: keyframe saved; person-down and crowd detections became contract-shaped SQLite events")
 

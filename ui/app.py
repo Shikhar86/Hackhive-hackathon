@@ -42,7 +42,7 @@ min_confidence = st.sidebar.slider("Minimum confidence", 0.0, 1.0, 0.0, 0.05)
 
 limit = st.sidebar.number_input("Max events", min_value=1, max_value=500, value=50)
 
-auto_refresh = st.sidebar.checkbox("Auto-refresh (5 s)", value=False)
+auto_refresh = st.sidebar.checkbox("Auto-refresh (5 s)", value=True)
 
 # ---------------------------------------------------------------------------
 # Filtered event feed

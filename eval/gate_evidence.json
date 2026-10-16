@@ -7,5 +7,10 @@
     "ui": "User verified local Streamlit dashboard: person_down category filter shows the event; camera-1 selection retains its matching event; chatbot query 'show person down events' returns 1 matching row (screenshots supplied 2026-10-16).",
     "merge": "Local main checkout: only branch is main; requirements check and ingest/chatbot/event-rule/pipeline tests pass; Streamlit UI interaction was verified by user screenshot; real-video pipeline produced a SQLite event and keyframe.",
     "vision": "YOLO + ByteTrack on 33.2-second clip at 2 FPS: 67 sampled frames (0.0-33.0 s); primary person track ID 1 present in all 67 samples with no gaps; 1.84 detected people/sample average. Person-down labels: alerts matched 2/3 clear positive clips (first 30s clip and snow slip clip hit; icy-walk slip clip missed). Logs: data/videos/phase1_user_33s_tracks.jsonl and per-clip tracks."
+  },
+  "2": {
+    "event": "Ran vision.run_pipeline on the labeled 30-second fall clip at 2 FPS on the main RTX 3050 laptop. It finished in under clip duration, wrote two person_down events to data/events.db, saved both JPEG keyframes, and generated SmolVLM captions from those frames; keyframes reviewed for event match.",
+    "chat": "chatbot.chat.ask('Show person down events') returned all 5 stored events, including both phase2-demo and both phase2-refresh real-video events; each new event has a saved keyframe path (2026-10-16).",
+    "dashboard": "With Auto-refresh (5 s) checked in the existing localhost:8501 dashboard, ran the labeled clip for camera phase2-refresh; the page changed from 3 to 5 events and displayed both new person_down rows and keyframes without a manual reload (2026-10-16)."
   }
 }

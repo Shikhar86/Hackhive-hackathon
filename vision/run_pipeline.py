@@ -22,6 +22,7 @@ from core.db import insert_event
 from core.schema import Event
 from vision.detect_track import detect_and_track
 from vision.event_rules import DetectedEvent, EventDetector
+from vision.vlm import summarize_image
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,6 +74,7 @@ def run_pipeline(
     person_down_height_drop: float = 0.55,
     person_down_frames: int = 3,
     crowd_threshold: int = 8,
+    use_vlm: bool = True,
     db_path=None,
 ) -> list[Event]:
     """Run the full detection → rules → DB pipeline on a video source.
@@ -99,11 +101,19 @@ def run_pipeline(
             new_events = detector.process_frame(tracked_frame)
             for det in new_events:
                 kf_path = save_keyframe(det)
+                summary = det.summary
+                if use_vlm:
+                    try:
+                        caption = summarize_image(det.image)
+                        summary = f"Possible {det.category.replace('_', ' ')}: {caption}"
+                    except Exception as exc:
+                        summary = f"VLM summary unavailable ({type(exc).__name__}); {det.summary}"
+                        print(f"WARNING: {summary}")
                 event = Event.create(
                     camera_id=det.camera_id,
                     category=det.category,
                     confidence=det.confidence,
-                    summary=det.summary,
+                    summary=summary,
                     keyframe_path=kf_path,
                 )
                 insert(event)
@@ -135,6 +145,7 @@ def main() -> None:
     parser.add_argument("--person-down-aspect", type=float, default=1.0)
     parser.add_argument("--person-down-frames", type=int, default=3)
     parser.add_argument("--crowd-threshold", type=int, default=8)
+    parser.add_argument("--no-vlm", action="store_true", help="Use heuristic summaries without loading SmolVLM")
     args = parser.parse_args()
 
     if args.mock:
@@ -157,6 +168,7 @@ def main() -> None:
         person_down_aspect=args.person_down_aspect,
         person_down_frames=args.person_down_frames,
         crowd_threshold=args.crowd_threshold,
+        use_vlm=not args.no_vlm,
     )
     print(f"\nPipeline finished: {len(events)} event(s) created.")
 
