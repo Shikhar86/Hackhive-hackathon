@@ -23,7 +23,7 @@ Evidence is kept in `eval/gate_evidence.json`. Commit the evidence alongside the
 
 **Automated:** schema categories and seven fields, SQLite insert/retrieve, mock pipeline, OpenCV import.
 
-**Human:** run `nvidia-smi` and record GPU/VRAM; confirm YOLO and SmolVLM load on the main laptop; B and C clone the repository and receive the frozen schema; B gets one Ollama answer and C opens a blank Streamlit page. Also put the schema and categories in the README. Keep model-download and version details in the evidence note.
+**Human:** run `nvidia-smi` and record GPU/VRAM; confirm YOLO and SmolVLM load on the main laptop; verify the frozen seven-field schema and categories are in the shared checkout and README; open the local Streamlit dashboard and verify an Ollama-backed answer on that laptop. Keep model-download and version details in the evidence note. The earlier checks for separate teammate laptop clones were retired when the team adopted the one-laptop plan; `single_laptop_contract` and `local_services` replace them rather than counting unperformed multi-laptop work as complete.
 
 ## Gate 1 - independent modules, hours 3-15
 

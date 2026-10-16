@@ -1,6 +1,8 @@
 {
   "0": {
-    "gpu_models": "RTX 3050 A 4 GB; YOLO detected 4 people; SmolVLM captioned image on CUDA; measurements in docs/gpu-smoke.md"
+    "gpu_models": "RTX 3050 A 4 GB; YOLO detected 4 people; SmolVLM captioned image on CUDA; measurements in docs/gpu-smoke.md",
+    "single_laptop_contract": "The one-laptop main checkout contains the frozen seven-field Event contract and five allowed category values in core/schema.py and README.md. The Phase 0 automated foundation check round-trips the contract through SQLite; all modules were integrated and later gates run from this checkout.",
+    "local_services": "On the main Windows laptop, the Streamlit dashboard displayed video-derived events and keyframes during the Phase 6 fresh-clone rehearsal, and camera-filtered chatbot queries returned the matching events. The Phase 4 live semantic regression used the locally running Ollama nomic-embed-text model to rank the paraphrased event; the ordinary search path also passed. See the Phase 4 and Phase 6 evidence entries."
   },
   "1": {
     "chat": "eval.test_chatbot on 200 synthetic events: 20/20 saved questions matched expected rows; DROP, UPDATE, and DELETE all rejected; fixture intact.",

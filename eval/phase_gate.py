@@ -1,7 +1,7 @@
 """Small, honest gate runner for the 48-hour build plan.
 
 Run: python -m eval.phase_gate check 0
-Record a human check: python -m eval.phase_gate record 0 team_handoff "B and C cloned commit abc123"
+Record a human check: python -m eval.phase_gate record 0 single_laptop_contract "Shared checkout and frozen event schema verified"
 """
 
 import argparse
@@ -25,8 +25,8 @@ GATES = {
         "auto": {"foundation": "Schema, SQLite, and mock event round trip", "opencv": "OpenCV imports"},
         "manual": {
             "gpu_models": "YOLO and SmolVLM load on the main laptop; record GPU and versions",
-            "team_handoff": "B and C have the frozen schema, categories, and repo",
-            "teammate_smoke": "B's Ollama prompt and C's blank Streamlit page work",
+            "single_laptop_contract": "Frozen event contract is shared in the one-laptop checkout",
+            "local_services": "Streamlit dashboard and local Ollama work on the main laptop",
         },
     },
     1: {
