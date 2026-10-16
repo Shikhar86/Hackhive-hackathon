@@ -102,6 +102,16 @@ st.markdown(
     }
     .ui-steps a:first-child { background: linear-gradient(110deg, #694964, #402d43); color: #fff; }
     .ui-anchor { scroll-margin-top: 1rem; }
+    .ui-tools { margin: 1.4rem 0 1.8rem; }
+    .ui-tools h2 { font-size: 1.25rem; margin-bottom: .25rem; }
+    .ui-tools p { color: #bdaabd; margin: 0 0 .8rem; }
+    .ui-tool-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; }
+    .ui-tool-grid a { display: block; min-height: 104px; padding: 1rem;
+        color: #eee0ec; text-decoration: none; border: 1px solid #624d61;
+        border-radius: 18px; background: linear-gradient(145deg, #251c27, #130f16); }
+    .ui-tool-grid a:hover { border-color: #d4a2ca; background: #332537; }
+    .ui-tool-grid strong { display: block; color: #fff; margin-bottom: .35rem; }
+    .ui-tool-grid small { color: #bdaabd; line-height: 1.4; }
     .ui-metric {
         min-height: 118px; padding: 1.25rem 1.4rem; border-radius: 22px;
         background: linear-gradient(135deg, #1c1720, #0e0c11);
@@ -168,6 +178,7 @@ st.markdown(
         .ui-hero { flex-direction: column; align-items: flex-start; padding: 1.55rem; }
         .ui-hero h1 { font-size: 2.1rem; }
         .ui-hero-status { align-self: flex-start; }
+        .ui-tool-grid { grid-template-columns: repeat(2, 1fr); }
     }
     </style>
     """,
@@ -187,6 +198,7 @@ st.markdown(
       <a href="#video-analysis">01 &nbsp; Analyze video</a>
       <a href="#review-events">02 &nbsp; Review events</a>
       <a href="#ask-assistant">03 &nbsp; Ask the assistant</a>
+      <a href="#flag-moment">04 &nbsp; Flag a missed moment</a>
     </nav>
     """,
     unsafe_allow_html=True,
@@ -208,6 +220,22 @@ for column, css_class, label, value, foot in zip(
             f'<div class="ui-metric-value">{value}</div><div class="ui-metric-foot">{foot}</div></div>',
             unsafe_allow_html=True,
         )
+
+st.markdown(
+    """
+    <section class="ui-tools" aria-label="New incident tools">
+      <h2>New incident tools</h2>
+      <p>Four ways to inspect and document what the analysis finds or misses.</p>
+      <div class="ui-tool-grid">
+        <a href="#video-analysis"><strong>Footage check</strong><small>Upload a clip to see low-light and blur warnings.</small></a>
+        <a href="#video-analysis"><strong>Analysis coverage</strong><small>Run a clip to see frames checked, people tracked, and alerts.</small></a>
+        <a href="#flag-moment"><strong>Flag a missed moment</strong><small>Mark a video time yourself, clearly separate from AI alerts.</small></a>
+        <a href="#review-events"><strong>Incident reports</strong><small>Open an alert or operator flag to download its report.</small></a>
+      </div>
+    </section>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def save_upload(uploaded_file) -> Path:
@@ -408,6 +436,7 @@ with video_controls:
         disabled=source_path is None or not camera_id.strip(),
     )
 
+prepared_preview = None
 with video_preview:
     st.caption("VIDEO PREVIEW")
     if source_path:
@@ -417,6 +446,7 @@ with video_preview:
             except (OSError, subprocess.SubprocessError) as exc:
                 st.warning(f"Preview unavailable: {type(exc).__name__}. Re-select the file or try a shorter clip before analysis.")
             else:
+                prepared_preview = preview_path
                 st.video(str(preview_path))
                 try:
                     quality = cached_footage_quality(str(preview_path))
@@ -556,42 +586,45 @@ if latest_run:
             f"Show person down events from camera {latest_run['camera_id']}"
         )
 
-    st.subheader("Flag a missed moment")
-    st.caption("This creates an operator flag, not an AI detection. It stays separate from the chatbot's detected-event feed.")
-    if not latest_run.get("source_path"):
-        st.info("Analyze the clip again to flag a video moment.")
-    else:
-        with st.form("operator_flag_form", clear_on_submit=True):
-            flag_time = st.number_input(
-                "Video time in seconds", min_value=0.0,
-                max_value=float(latest_run["duration_s"] or 0.0) if latest_run.get("duration_s") else None,
-                value=0.0, step=0.5,
-            )
-            flag_note = st.text_area("What did you observe?", placeholder="Describe the moment you want a person to review.")
-            save_flag = st.form_submit_button("Save operator flag")
-        if save_flag:
-            flag_source = Path(latest_run["source_path"])
-            if not flag_note.strip():
-                st.error("Add a note describing the observed moment.")
-            elif not flag_source.is_file():
-                st.error("The analyzed video is no longer on this laptop.")
+st.markdown('<div id="flag-moment" class="ui-anchor"></div>', unsafe_allow_html=True)
+st.subheader("Flag a missed moment")
+st.caption("This creates an operator flag, not an AI detection. It stays separate from the chatbot's detected-event feed.")
+flag_source = prepared_preview
+if flag_source is None and latest_run and latest_run.get("source_path"):
+    flag_source = Path(latest_run["source_path"])
+if flag_source is None or not flag_source.is_file():
+    st.info("Choose a video above to flag a moment. AI analysis is optional.")
+else:
+    flag_camera = camera_id.strip() if source_path else latest_run["camera_id"]
+    flag_duration = video_duration(flag_source)
+    with st.form("operator_flag_form", clear_on_submit=True):
+        flag_time = st.number_input(
+            "Video time in seconds", min_value=0.0,
+            max_value=float(flag_duration) if flag_duration else None,
+            value=0.0, step=0.5,
+        )
+        flag_note = st.text_area("What did you observe?", placeholder="Describe the moment you want a person to review.")
+        save_flag = st.form_submit_button("Save operator flag", disabled=not flag_camera)
+    if save_flag:
+        if not flag_note.strip():
+            st.error("Add a note describing the observed moment.")
+        else:
+            image = video_frame_at(flag_source, flag_time)
+            if image is None:
+                st.error("No frame was available at that time. Choose a moment within the clip.")
             else:
-                image = video_frame_at(flag_source, flag_time)
-                if image is None:
-                    st.error("No frame was available at that time. Choose a moment within the clip.")
+                keyframe_dir = ROOT / "data" / "keyframes"
+                keyframe_dir.mkdir(parents=True, exist_ok=True)
+                keyframe_path = keyframe_dir / f"operator_{uuid4().hex}.jpg"
+                if not cv2.imwrite(str(keyframe_path), cv2.cvtColor(image, cv2.COLOR_RGB2BGR)):
+                    st.error("Could not save the operator keyframe.")
                 else:
-                    keyframe_dir = ROOT / "data" / "keyframes"
-                    keyframe_dir.mkdir(parents=True, exist_ok=True)
-                    keyframe_path = keyframe_dir / f"operator_{uuid4().hex}.jpg"
-                    if not cv2.imwrite(str(keyframe_path), cv2.cvtColor(image, cv2.COLOR_RGB2BGR)):
-                        st.error("Could not save the operator keyframe.")
-                    else:
-                        insert_operator_flag(
-                            latest_run["camera_id"], str(flag_source), flag_time,
-                            flag_note, str(keyframe_path.relative_to(ROOT)),
-                        )
-                        st.success("Operator flag saved separately from AI detections.")
-                        st.rerun()
+                    insert_operator_flag(
+                        flag_camera, str(flag_source), flag_time,
+                        flag_note, str(keyframe_path.relative_to(ROOT)),
+                    )
+                    st.success("Operator flag saved separately from AI detections.")
+                    st.rerun()
 
 operator_flags = get_operator_flags(limit=50)
 if operator_flags:
