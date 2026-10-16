@@ -5,8 +5,10 @@ Run::
     streamlit run ui/app.py
 """
 
+import shutil
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 # Ensure project root is importable when Streamlit runs this file directly.
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +19,7 @@ import streamlit as st
 
 from chatbot.chat import ask
 from core.db import get_events, init_db
+from vision.run_pipeline import run_pipeline
 
 init_db()
 
@@ -25,6 +28,42 @@ init_db()
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Surveillance Dashboard", layout="wide")
 st.title("🔒 Surveillance Event Dashboard")
+st.caption("Review a clip, detect person-down events, and ask questions about saved results.")
+
+# ---------------------------------------------------------------------------
+# Local video upload and processing
+# ---------------------------------------------------------------------------
+st.header("Video analysis")
+uploaded_video = st.file_uploader("Choose a video", type=["mp4", "avi", "mov"])
+
+if uploaded_video is not None:
+    suffix = Path(uploaded_video.name).suffix.lower()
+    if suffix == ".mp4":
+        st.video(uploaded_video)
+    else:
+        st.info("Browser playback may not support this format. The video can still be analyzed.")
+
+camera_id = st.text_input("Camera name for this run", value="uploaded-camera")
+if st.button("Analyze video", disabled=uploaded_video is None or not camera_id.strip()):
+    upload_dir = ROOT / "data" / "videos" / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    source_path = upload_dir / f"{uuid4().hex}{suffix}"
+    uploaded_video.seek(0)
+    with source_path.open("wb") as output:
+        shutil.copyfileobj(uploaded_video, output)
+
+    with st.spinner("Detecting and tracking people, then describing event keyframes..."):
+        try:
+            created = run_pipeline(str(source_path), camera_id=camera_id.strip())
+        except Exception as exc:
+            st.error(f"Video analysis failed: {type(exc).__name__}: {exc}")
+        else:
+            if created:
+                st.success(f"Analysis complete: {len(created)} event(s) saved. See the feed below.")
+            else:
+                st.info("Analysis complete. No person-down event was detected in this video.")
+
+st.caption("Videos are processed on this laptop at 2 sampled frames per second. Uploaded files stay in the local data/videos folder.")
 
 # ---------------------------------------------------------------------------
 # Sidebar filters
@@ -76,7 +115,7 @@ def render_event_feed():
         }
         for event in filtered
     ]
-    st.dataframe(table_data, use_container_width=True)
+    st.dataframe(table_data, width="stretch")
 
     keyframe_events = [event for event in filtered if event.get("keyframe_path")]
     if keyframe_events:
@@ -86,7 +125,7 @@ def render_event_feed():
             col = cols[idx % len(cols)]
             kf_path = ROOT / event["keyframe_path"]
             if kf_path.is_file():
-                col.image(str(kf_path), caption=f"{event['category']} — {event['camera_id']}", use_container_width=True)
+                col.image(str(kf_path), caption=f"{event['category']} — {event['camera_id']}", width="stretch")
             else:
                 col.warning(f"Missing: {event['keyframe_path']}")
 
@@ -118,6 +157,6 @@ if question:
                 }
                 for r in rows
             ]
-            st.dataframe(chat_table, use_container_width=True)
+            st.dataframe(chat_table, width="stretch")
     except (ValueError, RuntimeError) as exc:
         st.error(str(exc))

@@ -37,7 +37,11 @@ Run the full video-to-event pipeline and open the dashboard in another PowerShel
 
 The video pipeline calls cached SmolVLM on each event keyframe by default. Use `--no-vlm` only for debugging the vision rules without captions.
 
-Then open the local Streamlit address, usually `http://localhost:8501`, and check the feed, filters, keyframes, and chatbot. Run the Phase 1 gate with:
+Then open the local Streamlit address, usually `http://localhost:8501`, and check the feed, filters, keyframes, and chatbot.
+
+The dashboard also accepts an uploaded MP4, AVI, or MOV file. MP4 clips preview in the browser; AVI and MOV can be processed even if the browser cannot play them. Enter a camera name and choose **Analyze video** to run the same YOLO, ByteTrack, person-down, SmolVLM, and SQLite pipeline at the default 2 sampled frames per second. Results appear in the event feed below the upload area. The upload is saved locally under ignored `data/videos/uploads/`; it is not sent to a cloud service. A clip with no matching event will report zero events. Processing happens on the laptop and may take time for long clips.
+
+Run the Phase 1 gate with:
 
 ```powershell
 .\.venv\Scripts\python.exe -m eval.phase_gate check 1
