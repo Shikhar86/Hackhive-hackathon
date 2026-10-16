@@ -553,7 +553,7 @@ if analyze_clicked:
                 st.session_state["chat_question"] = (
                     f"Show person down events from camera {camera_id.strip()}"
                 )
-                st.success(f"Analysis complete: {len(created)} review candidate(s) saved. See the feed below.")
+                st.success(f"Analysis complete: {len(created)} review candidate(s) available. See the feed below.")
             else:
                 st.info(
                     f"Analysis complete with **{rotation}** orientation and "
@@ -572,7 +572,7 @@ if latest_run:
         f"{latest_run.get('rotation', 'orientation unknown')} · "
         f"{latest_run.get('detection_mode', 'mode unknown')}"
     )
-    st.metric("New AI review candidates", len(latest_run["events"]))
+    st.metric("AI review candidates", len(latest_run["events"]))
     st.subheader("Analysis coverage")
     st.caption(
         f"Clip length: {display_video_time(latest_run.get('duration_s'))} · "
@@ -594,8 +594,8 @@ if latest_run:
                 evidence = get_event_evidence(event["id"])
                 if evidence:
                     st.write(f"**Video timestamp: {display_video_time(evidence['video_time_s'])}**")
-                score_label = "Earlier YOLO person-box score" if event["summary"].startswith("VLM-assisted") else "Detector score"
-                st.caption(f"{score_label} {event['confidence']:.0%} · Saved {display_time(event['timestamp'])}")
+                score = "Unscored VLM review candidate" if event["summary"].startswith("VLM-assisted") else f"Detector score {event['confidence']:.0%}"
+                st.caption(f"{score} · Saved {display_time(event['timestamp'])}")
     if latest_run["events"] and st.button("Ask the chatbot about this run"):
         st.session_state["chat_question"] = (
             f"Show person down events from camera {latest_run['camera_id']}"
@@ -713,7 +713,7 @@ def render_event_feed():
     if selected_camera != "All":
         filtered = [event for event in filtered if event["camera_id"] == selected_camera]
     if min_confidence > 0:
-        filtered = [event for event in filtered if event["confidence"] >= min_confidence]
+        filtered = [event for event in filtered if not event["summary"].startswith("VLM-assisted") and event["confidence"] >= min_confidence]
     if selected_review != "All":
         filtered = [
             event for event in filtered
@@ -731,7 +731,7 @@ def render_event_feed():
             "Time (local)": display_time(event["timestamp"]),
             "Camera": event["camera_id"],
             "Category": event["category"].replace("_", " ").title(),
-            "Score": f"{event['confidence']:.0%} track" if event["summary"].startswith("VLM-assisted") else f"{event['confidence']:.0%}",
+            "Score": "Unscored" if event["summary"].startswith("VLM-assisted") else f"{event['confidence']:.0%}",
             "Review": review_map.get(event["id"], "Unreviewed"),
             "Summary": event["summary"][:80],
         }
@@ -808,8 +808,10 @@ if selected_event:
     with description_column:
         st.subheader(selected_event["category"].replace("_", " ").title())
         st.write(selected_event["summary"])
-        score_label = "Earlier YOLO person-box score" if selected_event["summary"].startswith("VLM-assisted") else "Detector score"
-        st.caption(f"{score_label}: {selected_event['confidence']:.0%} · This is not a calibrated fall probability.")
+        if selected_event["summary"].startswith("VLM-assisted"):
+            st.caption("Unscored VLM review candidate · Earlier YOLO box score is in the explanation below.")
+        else:
+            st.caption(f"Detector score: {selected_event['confidence']:.0%} · This is not a calibrated fall probability.")
         st.markdown("**Why was this flagged?**")
         if evidence and evidence["rule_reason"]:
             st.info(evidence["rule_reason"])
@@ -883,8 +885,9 @@ if selected_event:
             summary=selected_event["summary"],
             reason=evidence["rule_reason"] if evidence and evidence["rule_reason"] else "Detailed rule evidence unavailable.",
             review_status=review["status"], review_note=review["note"],
-            keyframe_path=keyframe_path, detector_score=selected_event["confidence"],
-            score_label=("Earlier YOLO person-box score" if selected_event["summary"].startswith("VLM-assisted") else "Detector score"),
+            keyframe_path=keyframe_path,
+            detector_score=(None if selected_event["summary"].startswith("VLM-assisted") else selected_event["confidence"]),
+            score_label=("Incident confidence" if selected_event["summary"].startswith("VLM-assisted") else "Detector score"),
         ),
         help="Downloads one self-contained HTML file. Open it in a browser or print it to PDF.",
     )
@@ -914,7 +917,7 @@ if question:
                     "Time (local)": display_time(r["timestamp"]),
                     "Camera": r["camera_id"],
                     "Category": r["category"].replace("_", " ").title(),
-                    "Confidence": f"{r['confidence']:.0%}",
+                    "Confidence": "Unscored" if r["summary"].startswith("VLM-assisted") else f"{r['confidence']:.0%}",
                     "Summary": r["summary"][:80],
                 }
                 for r in rows

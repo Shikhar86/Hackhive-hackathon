@@ -6,9 +6,10 @@ grounded person in a nearby crop. The evaluated standard pipeline is unchanged.
 """
 
 from collections import defaultdict
+from contextlib import closing
 from pathlib import Path
 
-from core.db import insert_event, insert_event_evidence
+from core.db import DB_PATH, connect, init_db, insert_event, insert_event_evidence
 from core.schema import Event
 from vision.detect_track import TrackedFrame
 from vision.event_rules import DetectedEvent
@@ -19,18 +20,20 @@ from vision.vlm import caption_image
 GROUND_PROMPT = "Is a person clearly lying or collapsed on the ground in this crop? Answer Yes or No only."
 
 
-def _nearby_crop(image, box):
-    """Look above and around the last upright box for a person who went low."""
+def _nearby_crops(image, box):
+    """Inspect both the previously useful upper view and the floor below it."""
     image_h, image_w = image.shape[:2]
     x1, y1, x2, y2 = box
     width, height = x2 - x1, y2 - y1
-    left = max(0, int(x1 - 0.7 * width))
-    right = min(image_w, int(x2 + 1.9 * width))
-    top = max(0, int(y1 - 0.7 * height))
-    bottom = min(image_h, int(y2 - 0.54 * height))
-    if right - left < 60 or bottom - top < 60:
-        return None
-    return image[top:bottom, left:right]
+    windows = (
+        (x1 - 0.7 * width, y1 - 0.7 * height, x2 + 1.9 * width, y2 - 0.54 * height),
+        (x1 - width, y1 - 0.2 * height, x2 + width, y2 + 0.5 * height),
+    )
+    for left, top, right, bottom in windows:
+        left, top = max(0, int(left)), max(0, int(top))
+        right, bottom = min(image_w, int(right)), min(image_h, int(bottom))
+        if right - left >= 60 and bottom - top >= 60:
+            yield image[top:bottom, left:right]
 
 
 def propose_short_clip_review(
@@ -40,6 +43,20 @@ def propose_short_clip_review(
     """Save at most one labeled VLM-assisted review candidate for a short clip."""
     if not 3 <= len(frames) <= 20 or not Path(source_path).is_file():
         return []
+    resolved_source = str(Path(source_path).resolve())
+    selected_db = DB_PATH if db_path is None else db_path
+    init_db(selected_db)
+    with closing(connect(selected_db)) as connection:
+        existing = connection.execute(
+            "SELECT events.* FROM events JOIN event_evidence evidence "
+            "ON evidence.event_id = events.id WHERE evidence.source_path = ? "
+            "AND events.camera_id = ? "
+            "AND events.summary LIKE 'VLM-assisted review candidate%' "
+            "ORDER BY events.timestamp DESC LIMIT 1",
+            (resolved_source, camera_id),
+        ).fetchone()
+    if existing is not None:
+        return [Event(**dict(existing))]
     history = defaultdict(list)
     for index, frame in enumerate(frames):
         if frame.image is None:
@@ -74,22 +91,25 @@ def propose_short_clip_review(
         for frame in frames[last_index + 1:last_index + 5]:
             if not 0.5 <= frame.video_time_s - last_frame.video_time_s <= 2.0:
                 continue
-            crop = _nearby_crop(frame.image, last_track["xyxy"])
+            crop = None
+            for nearby in _nearby_crops(frame.image, last_track["xyxy"]):
+                answer = caption_image(nearby, GROUND_PROMPT, max_new_tokens=12)
+                if answer.strip().lower().startswith("yes"):
+                    crop = nearby
+                    break
             if crop is None:
-                continue
-            answer = caption_image(crop, GROUND_PROMPT, max_new_tokens=12)
-            if not answer.strip().lower().startswith("yes"):
                 continue
             reason = (
                 "VLM-assisted short-clip review candidate: YOLO tracked a person "
                 f"(ID {track_id}) at {last_frame.video_time_s:.1f}s, then lost the track; "
                 f"local SmolVLM saw a possible grounded person in a nearby crop at "
-                f"{frame.video_time_s:.1f}s. The displayed score is the earlier YOLO "
-                "person-box score, not a fall probability. Review the original video."
+                f"{frame.video_time_s:.1f}s. Earlier YOLO person-box score: "
+                f"{last_track['confidence']:.0%}. This candidate has no incident "
+                "confidence score. Review the original video."
             )
             detected = DetectedEvent(
                 camera_id=camera_id, category="person_down",
-                confidence=float(last_track["confidence"]),
+                confidence=0.0,  # Schema placeholder: this review proposal is unscored.
                 summary="", frame_index=frame.frame_index,
                 video_time_s=frame.video_time_s,
                 captured_at_utc=frame.captured_at_utc, image=crop,
@@ -117,13 +137,13 @@ def propose_short_clip_review(
             if db_path is None:
                 insert_event(event)
                 insert_event_evidence(
-                    event.id, str(Path(source_path).resolve()), frame.video_time_s,
+                    event.id, resolved_source, frame.video_time_s,
                     frame.frame_index, track_id, reason, detected.track_points,
                 )
             else:
                 insert_event(event, db_path)
                 insert_event_evidence(
-                    event.id, str(Path(source_path).resolve()), frame.video_time_s,
+                    event.id, resolved_source, frame.video_time_s,
                     frame.frame_index, track_id, reason, detected.track_points,
                     db_path=db_path,
                 )

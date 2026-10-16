@@ -61,7 +61,7 @@ def incident_report_html(
         picture = f'<img alt="Incident keyframe" src="data:image/jpeg;base64,{encoded}">'
     score = (
         f"<p><strong>{escape(score_label)}:</strong> {detector_score:.0%} (not a calibrated fall probability)</p>"
-        if detector_score is not None else "<p><strong>Detector score:</strong> None — operator flag</p>"
+        if detector_score is not None else f"<p><strong>{escape(score_label)}:</strong> Not available</p>"
     )
     document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Incident report</title>

@@ -59,6 +59,8 @@ def search_events(category=None, camera_id=None, min_confidence=None, limit=100,
         if min_confidence is not None:
             clauses.append("confidence >= ?")
             parameters.append(min_confidence)
+            # Older VLM proposals stored the preceding YOLO box score here.
+            clauses.append("summary NOT LIKE 'VLM-assisted review candidate%'")
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         query = "SELECT id, timestamp, camera_id, category, confidence, summary, keyframe_path " + f"FROM events{where} ORDER BY timestamp DESC, id DESC LIMIT ?"
         parameters.append(limit)
