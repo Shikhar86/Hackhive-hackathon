@@ -424,7 +424,7 @@ with video_controls:
         "Person-down detection",
         ["Automatic (review fallback)", "Standard", "Motion-sensitive (experimental)"],
         key=f"detection_mode_{file_key}",
-        help="Automatic tries the evaluated Standard rule, then experimental low-posture review. On short clips with zero results, it may also use a local VLM crop review. Review every alert.",
+        help="Automatic tries the evaluated Standard rule, then experimental low-posture review. On short clips with zero results, it may also review nearby floor views before and after a person track disappears. Review every candidate.",
     )
 
     if "camera_name" not in st.session_state:
@@ -433,7 +433,7 @@ with video_controls:
         st.session_state["camera_name"] = suggest_camera_name()
     camera_id = st.text_input("Camera name for this run", key="camera_name")
     st.caption("A new name keeps this run separate from earlier results.")
-    run_signature = ("short-clip-review-v3", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
+    run_signature = ("short-clip-review-v4", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
     previous_run = st.session_state.get("latest_run")
     if previous_run and previous_run.get("run_signature") != run_signature:
         st.session_state.pop("latest_run", None)

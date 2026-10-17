@@ -40,12 +40,11 @@ def _describes_person_down(answer: str) -> bool:
 
 
 def _nearby_crops(image, box):
-    """Inspect the upper view, then nearby floor and furniture at two scales."""
+    """Inspect nearby floor and furniture at two scales."""
     image_h, image_w = image.shape[:2]
     x1, y1, x2, y2 = box
     width, height = x2 - x1, y2 - y1
     windows = (
-        (x1 - 0.7 * width, y1 - 0.7 * height, x2 + 1.9 * width, y2 - 0.54 * height),
         (x1 - 2.0 * width, y1 - 0.3 * height, x2 + 2.0 * width, y2 + 1.5 * height),
         (x1 - width, y1 - 0.2 * height, x2 + width, y2 + 0.5 * height),
     )
@@ -130,15 +129,25 @@ def propose_short_clip_review(
                 if not terminal or frame.video_time_s <= last_frame.video_time_s:
                     continue
             crop = None
+            evidence_frame = frame
+            terminal_posture = None
             if terminal:
                 before_crops = list(_nearby_crops(last_frame.image, last_track["xyxy"]))
                 after_crops = list(_nearby_crops(frame.image, last_track["xyxy"]))
-                if len(before_crops) > 1 and len(after_crops) > 1:
-                    before = caption_image(before_crops[1], POSTURE_PROMPT, max_new_tokens=40)
-                    if not _describes_person_down(before):
-                        after = caption_image(after_crops[1], POSTURE_PROMPT, max_new_tokens=40)
-                        if _describes_person_down(after):
-                            crop = after_crops[1]
+                if before_crops and after_crops:
+                    before = caption_image(before_crops[0], POSTURE_PROMPT, max_new_tokens=40)
+                    after = caption_image(after_crops[0], POSTURE_PROMPT, max_new_tokens=40)
+                    before_down = _describes_person_down(before)
+                    after_down = _describes_person_down(after)
+                    if after_down:
+                        terminal_posture = "new_down" if not before_down else "persistent_down"
+                        crop = after_crops[0]
+                    elif before_down:
+                        # Keep the earlier visible down posture even if the
+                        # person recovers or the later view becomes unclear.
+                        terminal_posture = "earlier_down"
+                        evidence_frame = last_frame
+                        crop = before_crops[0]
             else:
                 for nearby in _nearby_crops(frame.image, last_track["xyxy"]):
                     answer = caption_image(nearby, GROUND_PROMPT, max_new_tokens=12)
@@ -151,18 +160,22 @@ def propose_short_clip_review(
                 "VLM-assisted short-clip review candidate: YOLO tracked a person "
                 f"(ID {track_id}) at {last_frame.video_time_s:.1f}s, then lost the track; "
                 f"local SmolVLM saw a possible person lying on the floor or across chairs at "
-                f"{frame.video_time_s:.1f}s. Earlier YOLO person-box score: "
+                f"{evidence_frame.video_time_s:.1f}s. Earlier YOLO person-box score: "
                 f"{last_track['confidence']:.0%}. This candidate has no incident "
                 "confidence score. Review the original video."
             )
             if terminal:
-                reason += " The posture changed in the final sampled frame; this is an end-of-clip review proposal."
+                reason += {
+                    "new_down": " The posture changed in the final sampled frame; this is an end-of-clip review proposal.",
+                    "persistent_down": " A person appears down in both checked views; fall onset is not established.",
+                    "earlier_down": " A person appears down in the earlier checked view; the later view does not confirm a fall onset.",
+                }[terminal_posture]
             detected = DetectedEvent(
                 camera_id=camera_id, category="person_down",
                 confidence=0.0,  # Schema placeholder: this review proposal is unscored.
-                summary="", frame_index=frame.frame_index,
-                video_time_s=frame.video_time_s,
-                captured_at_utc=frame.captured_at_utc, image=crop,
+                summary="", frame_index=evidence_frame.frame_index,
+                video_time_s=evidence_frame.video_time_s,
+                captured_at_utc=evidence_frame.captured_at_utc, image=crop,
                 track_id=track_id, rule_reason=reason,
                 track_points=[
                     {
@@ -178,8 +191,11 @@ def propose_short_clip_review(
                 camera_id=camera_id, category="person_down",
                 confidence=detected.confidence,
                 summary=(
-                    f"VLM-assisted review candidate at {frame.video_time_s:.1f}s: " +
-                    ("a person may be down at the end of the clip. " if terminal else
+                    f"VLM-assisted review candidate at {evidence_frame.video_time_s:.1f}s: " +
+                    ({"new_down": "a person may be down at the end of the clip. ",
+                      "persistent_down": "a person appears down near the end; fall onset is unconfirmed. ",
+                      "earlier_down": "a person appears down before the final frame; fall onset is unconfirmed. "
+                     }[terminal_posture] if terminal else
                      "a person may be down after a person track disappeared. ") +
                     "Check the original video; this is not a confirmed fall."
                 ),
@@ -188,14 +204,14 @@ def propose_short_clip_review(
             if db_path is None:
                 insert_event(event)
                 insert_event_evidence(
-                    event.id, resolved_source, frame.video_time_s,
-                    frame.frame_index, track_id, reason, detected.track_points,
+                    event.id, resolved_source, evidence_frame.video_time_s,
+                    evidence_frame.frame_index, track_id, reason, detected.track_points,
                 )
             else:
                 insert_event(event, db_path)
                 insert_event_evidence(
-                    event.id, resolved_source, frame.video_time_s,
-                    frame.frame_index, track_id, reason, detected.track_points,
+                    event.id, resolved_source, evidence_frame.video_time_s,
+                    evidence_frame.frame_index, track_id, reason, detected.track_points,
                     db_path=db_path,
                 )
             return [event]

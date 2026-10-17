@@ -77,6 +77,29 @@ def main():
             )
             assert unchanged == []
 
+        with (
+            patch("vision.short_clip_review.caption_image", return_value="One person is lying down."),
+            patch("vision.short_clip_review.save_keyframe", return_value=None),
+        ):
+            persistent = propose_short_clip_review(terminal, str(source), "end-persistent", db)
+            assert len(persistent) == 1
+            assert persistent[0].confidence == 0.0
+            assert "fall onset is unconfirmed" in persistent[0].summary
+            assert "fall onset is not established" in get_event_evidence(persistent[0].id, db)["rule_reason"]
+
+        def recovered(crop, prompt, max_new_tokens):
+            return "One person is lying down." if crop.mean() < 100 else "The people are sitting."
+        with (
+            patch("vision.short_clip_review.caption_image", side_effect=recovered),
+            patch("vision.short_clip_review.save_keyframe", return_value=None),
+        ):
+            earlier = propose_short_clip_review(terminal, str(source), "end-earlier", db)
+            assert len(earlier) == 1
+            assert "before the final frame" in earlier[0].summary
+            evidence = get_event_evidence(earlier[0].id, db)
+            assert evidence["video_time_s"] == 2.0
+            assert "later view does not confirm" in evidence["rule_reason"]
+
     print("PASS: expanded crop, unscored candidate, confidence filter, repeat analysis, and end-frame review")
 
 
