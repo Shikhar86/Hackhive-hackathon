@@ -45,7 +45,10 @@ def open_source(source: str) -> tuple[cv2.VideoCapture, bool]:
     return capture, is_file
 
 
-def sampled_frames(source: str, camera_id: str, sample_fps: float = 2.0) -> Iterator[SampledFrame]:
+def sampled_frames(
+    source: str, camera_id: str, sample_fps: float = 2.0,
+    include_last_frame: bool = False,
+) -> Iterator[SampledFrame]:
     if sample_fps <= 0:
         raise ValueError("sample_fps must be positive")
     if not camera_id.strip():
@@ -59,6 +62,8 @@ def sampled_frames(source: str, camera_id: str, sample_fps: float = 2.0) -> Iter
 
     frame_index = 0
     next_sample_s = 0.0
+    last_frame = None
+    last_sampled_index = None
     start_monotonic = time.monotonic()
     try:
         while True:
@@ -66,7 +71,10 @@ def sampled_frames(source: str, camera_id: str, sample_fps: float = 2.0) -> Iter
             if not ok:
                 break
             video_time_s = frame_index / source_fps if is_file else time.monotonic() - start_monotonic
+            if is_file and include_last_frame:
+                last_frame = (frame_index, video_time_s, image)
             if video_time_s + 1e-9 >= next_sample_s:
+                last_sampled_index = frame_index
                 yield SampledFrame(
                     camera_id=camera_id,
                     frame_index=frame_index,
@@ -78,6 +86,16 @@ def sampled_frames(source: str, camera_id: str, sample_fps: float = 2.0) -> Iter
                 while next_sample_s <= video_time_s:
                     next_sample_s += 1.0 / sample_fps
             frame_index += 1
+        if is_file and include_last_frame and last_frame is not None:
+            last_index, last_time, last_image = last_frame
+            if last_index != last_sampled_index:
+                yield SampledFrame(
+                    camera_id=camera_id,
+                    frame_index=last_index,
+                    video_time_s=last_time,
+                    captured_at_utc=datetime.now(timezone.utc).isoformat(),
+                    image=last_image,
+                )
     finally:
         capture.release()
 

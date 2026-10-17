@@ -80,6 +80,7 @@ def run_pipeline(
     use_vlm: bool = True,
     db_path=None,
     on_frame: Callable[[TrackedFrame], None] | None = None,
+    include_last_frame: bool = False,
 ) -> list[Event]:
     """Run the full detection → rules → DB pipeline on a video source.
 
@@ -111,6 +112,7 @@ def run_pipeline(
 
     frames_gen = detect_and_track(
         source, camera_id, sample_fps, model_path, tracker, confidence, device,
+        include_last_frame=include_last_frame,
     )
     try:
         for count, tracked_frame in enumerate(frames_gen, start=1):

@@ -39,6 +39,7 @@ def detect_and_track(
     tracker: str = "bytetrack.yaml",
     confidence: float = 0.25,
     device: str | None = None,
+    include_last_frame: bool = False,
 ) -> Iterator[TrackedFrame]:
     """Yield detections with persistent tracker IDs for each sampled frame."""
     if not 0 <= confidence <= 1:
@@ -47,7 +48,7 @@ def detect_and_track(
     from ultralytics import YOLO
 
     model = YOLO(model_path)
-    frames = sampled_frames(source, camera_id, sample_fps)
+    frames = sampled_frames(source, camera_id, sample_fps, include_last_frame=include_last_frame)
     try:
         for frame in frames:
             result = model.track(

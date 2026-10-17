@@ -59,7 +59,25 @@ def main():
             late = propose_short_clip_review(make_frames(track_index=3), str(source), "other-camera", db)
             assert late == [], "A track lost only one second before the clip ends needs no proposal"
 
-    print("PASS: expanded crop, unscored candidate, confidence filter, and repeat analysis")
+        terminal = make_frames(track_index=4)
+        terminal[-1].image[:] = 255
+        def changed_posture(crop, prompt, max_new_tokens):
+            return "One person is lying down." if crop.mean() > 100 else "One person is standing."
+        with (
+            patch("vision.short_clip_review.caption_image", side_effect=changed_posture),
+            patch("vision.short_clip_review.save_keyframe", return_value=None),
+        ):
+            end_event = propose_short_clip_review(terminal, str(source), "end-review", db)
+            assert len(end_event) == 1
+            assert end_event[0].confidence == 0.0
+            assert "end of the clip" in end_event[0].summary
+            assert get_event_evidence(end_event[0].id, db)["video_time_s"] == 2.5
+            unchanged = propose_short_clip_review(
+                make_frames(track_index=4), str(source), "end-normal", db,
+            )
+            assert unchanged == []
+
+    print("PASS: expanded crop, unscored candidate, confidence filter, repeat analysis, and end-frame review")
 
 
 if __name__ == "__main__":

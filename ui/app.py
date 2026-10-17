@@ -433,7 +433,7 @@ with video_controls:
         st.session_state["camera_name"] = suggest_camera_name()
     camera_id = st.text_input("Camera name for this run", key="camera_name")
     st.caption("A new name keeps this run separate from earlier results.")
-    run_signature = ("short-clip-review-v2", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
+    run_signature = ("short-clip-review-v3", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
     previous_run = st.session_state.get("latest_run")
     if previous_run and previous_run.get("run_signature") != run_signature:
         st.session_state.pop("latest_run", None)
@@ -509,6 +509,7 @@ if analyze_clicked:
             def analyze_once(sensitive: bool):
                 return run_pipeline(
                     str(analysis_source), camera_id=camera_id.strip(), on_frame=show_sampled_frame,
+                    include_last_frame=True,
                     person_down_aspect=1.05 if sensitive else 1.2,
                     person_down_frames=2 if sensitive else 3,
                     person_down_motion_ratio=0.75 if sensitive else None,
@@ -569,7 +570,7 @@ if analyze_clicked:
                     "'Flag a missed moment' below to record any incident the AI missed."
                 )
 
-st.caption("Check that people are upright in the preview before analysis. Videos are processed on this laptop at 2 sampled frames per second. The original and its playback copy stay in the local data/videos folder.")
+st.caption("Check that people are upright in the preview before analysis. Videos are processed on this laptop at 2 sampled frames per second, plus the final video frame. The original and its playback copy stay in the local data/videos folder.")
 
 latest_run = st.session_state.get("latest_run")
 if latest_run:

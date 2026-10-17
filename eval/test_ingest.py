@@ -28,6 +28,10 @@ def main():
             expected_time = sample_number / 2
             assert expected_time <= frame.video_time_s < expected_time + 1 / 25 + 1e-9
             assert frame.image.shape == (240, 320, 3)
+        with_last = list(sampled_frames(str(path), "test-camera", 2.0, include_last_frame=True))
+        assert len(with_last) == 21
+        assert with_last[-1].frame_index == 249
+        assert abs(with_last[-1].video_time_s - 249 / 25) < 1e-9
         print(f"PASS: {len(frames)} samples from 250 frames / 10 seconds at 25 FPS")
         print("First five samples:")
         for frame in frames[:5]:

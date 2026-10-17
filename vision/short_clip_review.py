@@ -9,6 +9,7 @@ pipeline is unchanged.
 from collections import defaultdict
 from contextlib import closing
 from pathlib import Path
+import re
 
 from core.db import DB_PATH, connect, init_db, insert_event, insert_event_evidence
 from core.schema import Event
@@ -22,6 +23,20 @@ GROUND_PROMPT = (
     "Is a person visibly lying down, collapsed, or sprawled across chairs "
     "or on the floor? Answer Yes or No only."
 )
+POSTURE_PROMPT = (
+    "Describe the visible people's posture in one factual sentence. "
+    "Mention anyone lying down if clearly visible."
+)
+
+
+def _describes_person_down(answer: str) -> bool:
+    text = answer.lower().strip()
+    if re.search(r"\b(no|nobody|not|isn't|aren't|without)\b", text):
+        return False
+    return bool(re.search(
+        r"\b(person|people|someone|man|woman|individual)\b.{0,40}"
+        r"\b(lying down|lying on|collapsed|sprawled)\b", text,
+    ))
 
 
 def _nearby_crops(image, box):
@@ -77,6 +92,7 @@ def propose_short_clip_review(
             history[track["track_id"]].append((index, frame, track, image_w, image_h))
 
     candidates = []
+    terminal_candidates = []
     for track_id, observations in history.items():
         last_index, last_frame, track, image_w, image_h = observations[-1]
         x1, y1, x2, y2 = track["xyxy"]
@@ -91,18 +107,44 @@ def propose_short_clip_review(
             and 0.1 <= center_y <= 0.9
         ):
             candidates.append((area_ratio * track["confidence"], track_id, observations))
+        elif (
+            last_index < len(frames) - 1
+            and 0.1 <= frames[-1].video_time_s - last_frame.video_time_s < 1.5
+            and track["confidence"] >= 0.65
+            and area_ratio >= 0.015
+            and (x2 - x1) / (y2 - y1) < 0.95
+            and 0.1 <= center_x <= 0.9
+            and 0.1 <= center_y <= 0.9
+        ):
+            terminal_candidates.append((area_ratio * track["confidence"], track_id, observations))
 
-    for _, track_id, observations in sorted(candidates, reverse=True)[:4]:
+    prioritized = (
+        [(score, tid, observations, False) for score, tid, observations in sorted(candidates, reverse=True)[:4]]
+        + [(score, tid, observations, True) for score, tid, observations in sorted(terminal_candidates, reverse=True)[:4]]
+    )
+    for _, track_id, observations, terminal in prioritized:
         last_index, last_frame, last_track, _, _ = observations[-1]
-        for frame in frames[last_index + 1:last_index + 5]:
+        later_frames = [frames[-1]] if terminal else frames[last_index + 1:last_index + 5]
+        for frame in later_frames:
             if not 0.5 <= frame.video_time_s - last_frame.video_time_s <= 2.0:
-                continue
+                if not terminal or frame.video_time_s <= last_frame.video_time_s:
+                    continue
             crop = None
-            for nearby in _nearby_crops(frame.image, last_track["xyxy"]):
-                answer = caption_image(nearby, GROUND_PROMPT, max_new_tokens=12)
-                if answer.strip().lower().startswith("yes"):
-                    crop = nearby
-                    break
+            if terminal:
+                before_crops = list(_nearby_crops(last_frame.image, last_track["xyxy"]))
+                after_crops = list(_nearby_crops(frame.image, last_track["xyxy"]))
+                if len(before_crops) > 1 and len(after_crops) > 1:
+                    before = caption_image(before_crops[1], POSTURE_PROMPT, max_new_tokens=40)
+                    if not _describes_person_down(before):
+                        after = caption_image(after_crops[1], POSTURE_PROMPT, max_new_tokens=40)
+                        if _describes_person_down(after):
+                            crop = after_crops[1]
+            else:
+                for nearby in _nearby_crops(frame.image, last_track["xyxy"]):
+                    answer = caption_image(nearby, GROUND_PROMPT, max_new_tokens=12)
+                    if answer.strip().lower().startswith("yes"):
+                        crop = nearby
+                        break
             if crop is None:
                 continue
             reason = (
@@ -113,6 +155,8 @@ def propose_short_clip_review(
                 f"{last_track['confidence']:.0%}. This candidate has no incident "
                 "confidence score. Review the original video."
             )
+            if terminal:
+                reason += " The posture changed in the final sampled frame; this is an end-of-clip review proposal."
             detected = DetectedEvent(
                 camera_id=camera_id, category="person_down",
                 confidence=0.0,  # Schema placeholder: this review proposal is unscored.
@@ -134,8 +178,9 @@ def propose_short_clip_review(
                 camera_id=camera_id, category="person_down",
                 confidence=detected.confidence,
                 summary=(
-                    f"VLM-assisted review candidate at {frame.video_time_s:.1f}s: "
-                    "a person may be down after a person track disappeared. "
+                    f"VLM-assisted review candidate at {frame.video_time_s:.1f}s: " +
+                    ("a person may be down at the end of the clip. " if terminal else
+                     "a person may be down after a person track disappeared. ") +
                     "Check the original video; this is not a confirmed fall."
                 ),
                 keyframe_path=keyframe_path,
