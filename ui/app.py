@@ -433,7 +433,7 @@ with video_controls:
         st.session_state["camera_name"] = suggest_camera_name()
     camera_id = st.text_input("Camera name for this run", key="camera_name")
     st.caption("A new name keeps this run separate from earlier results.")
-    run_signature = ("short-clip-review-v1", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
+    run_signature = ("short-clip-review-v2", str(source_path) if source_path else None, rotation, detection_mode, camera_id.strip())
     previous_run = st.session_state.get("latest_run")
     if previous_run and previous_run.get("run_signature") != run_signature:
         st.session_state.pop("latest_run", None)
@@ -562,11 +562,11 @@ if analyze_clicked:
                 )
                 st.success(f"Analysis complete: {len(created)} review candidate(s) available. See the feed below.")
             else:
-                st.info(
+                st.warning(
                     f"Analysis complete with **{rotation}** orientation and "
-                    f"**{mode_used}** detection: no event was found. "
-                    "Check the video orientation and use 'Flag a missed moment' below "
-                    "to record an incident that the AI missed."
+                    f"**{mode_used}** detection: no AI review candidate was found. "
+                    "This does not rule out a fall. Review the video and use "
+                    "'Flag a missed moment' below to record any incident the AI missed."
                 )
 
 st.caption("Check that people are upright in the preview before analysis. Videos are processed on this laptop at 2 sampled frames per second. The original and its playback copy stay in the local data/videos folder.")

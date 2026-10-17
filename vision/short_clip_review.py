@@ -1,8 +1,9 @@
 """Conservative VLM review proposal when short clips lose a tracked person.
 
 This does not classify a fall. It proposes one moment for human review only
-when YOLO loses an interior person track and the local VLM recognizes a
-grounded person in a nearby crop. The evaluated standard pipeline is unchanged.
+when YOLO loses an interior person track and the local VLM proposes a
+person down on the floor or across nearby furniture. The evaluated standard
+pipeline is unchanged.
 """
 
 from collections import defaultdict
@@ -17,16 +18,20 @@ from vision.run_pipeline import save_keyframe
 from vision.vlm import caption_image
 
 
-GROUND_PROMPT = "Is a person clearly lying or collapsed on the ground in this crop? Answer Yes or No only."
+GROUND_PROMPT = (
+    "Is a person visibly lying down, collapsed, or sprawled across chairs "
+    "or on the floor? Answer Yes or No only."
+)
 
 
 def _nearby_crops(image, box):
-    """Inspect both the previously useful upper view and the floor below it."""
+    """Inspect the upper view, then nearby floor and furniture at two scales."""
     image_h, image_w = image.shape[:2]
     x1, y1, x2, y2 = box
     width, height = x2 - x1, y2 - y1
     windows = (
         (x1 - 0.7 * width, y1 - 0.7 * height, x2 + 1.9 * width, y2 - 0.54 * height),
+        (x1 - 2.0 * width, y1 - 0.3 * height, x2 + 2.0 * width, y2 + 1.5 * height),
         (x1 - width, y1 - 0.2 * height, x2 + width, y2 + 0.5 * height),
     )
     for left, top, right, bottom in windows:
@@ -79,6 +84,7 @@ def propose_short_clip_review(
         area_ratio = (x2 - x1) * (y2 - y1) / (image_w * image_h)
         if (
             last_index <= len(frames) - 3
+            and frames[-1].video_time_s - last_frame.video_time_s >= 1.5
             and track["confidence"] >= 0.55
             and area_ratio >= 0.012
             and 0.1 <= center_x <= 0.9
@@ -102,7 +108,7 @@ def propose_short_clip_review(
             reason = (
                 "VLM-assisted short-clip review candidate: YOLO tracked a person "
                 f"(ID {track_id}) at {last_frame.video_time_s:.1f}s, then lost the track; "
-                f"local SmolVLM saw a possible grounded person in a nearby crop at "
+                f"local SmolVLM saw a possible person lying on the floor or across chairs at "
                 f"{frame.video_time_s:.1f}s. Earlier YOLO person-box score: "
                 f"{last_track['confidence']:.0%}. This candidate has no incident "
                 "confidence score. Review the original video."
@@ -129,7 +135,7 @@ def propose_short_clip_review(
                 confidence=detected.confidence,
                 summary=(
                     f"VLM-assisted review candidate at {frame.video_time_s:.1f}s: "
-                    "a person may be on the ground after a person track disappeared. "
+                    "a person may be down after a person track disappeared. "
                     "Check the original video; this is not a confirmed fall."
                 ),
                 keyframe_path=keyframe_path,
