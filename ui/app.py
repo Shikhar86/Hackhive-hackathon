@@ -286,7 +286,10 @@ def browser_preview(source_path: Path, rotation: str = "As shown") -> Path:
     temporary_path = preview_path.with_name(f"{preview_path.stem}-{uuid4().hex}.mp4")
     command = [
         imageio_ffmpeg.get_ffmpeg_exe(), "-nostdin", "-hide_banner", "-loglevel", "error",
-        "-y", "-i", str(input_path), "-map", "0:v:0", "-map", "0:a?",
+        # Some iPhone MOV files include an auxiliary spatial-audio stream
+        # that the bundled FFmpeg cannot decode. Keep only the first audio
+        # stream, which is the normal playback track when present.
+        "-y", "-i", str(input_path), "-map", "0:v:0", "-map", "0:a:0?",
     ]
     if VIDEO_ROTATIONS[rotation]:
         command.extend(["-vf", VIDEO_ROTATIONS[rotation]])
@@ -296,7 +299,12 @@ def browser_preview(source_path: Path, rotation: str = "As shown") -> Path:
         "-movflags", "+faststart", str(temporary_path),
     ])
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True, timeout=300)
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True, timeout=300)
+        except subprocess.CalledProcessError as exc:
+            details = [line.strip() for line in (exc.stderr or "").splitlines() if line.strip()]
+            explanation = "; ".join(details[-3:]) if details else "FFmpeg gave no details"
+            raise RuntimeError(f"Video conversion failed: {explanation[:350]}") from exc
         temporary_path.replace(preview_path)
     finally:
         temporary_path.unlink(missing_ok=True)
@@ -451,8 +459,8 @@ with video_preview:
         with st.spinner("Preparing a browser-compatible preview..."):
             try:
                 preview_path = browser_preview(source_path, rotation)
-            except (OSError, subprocess.SubprocessError) as exc:
-                st.warning(f"Preview unavailable: {type(exc).__name__}. Re-select the file or try a shorter clip before analysis.")
+            except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+                st.warning(f"Preview unavailable: {exc}")
             else:
                 prepared_preview = preview_path
                 st.markdown("**Footage quality check**")
