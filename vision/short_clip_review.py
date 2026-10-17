@@ -1,8 +1,8 @@
-"""Conservative VLM review proposal when short clips lose a tracked person.
+"""Conservative VLM review proposal for short clips with missed people.
 
 This does not classify a fall. It proposes one moment for human review only
-when YOLO loses an interior person track and the local VLM proposes a
-person down on the floor or across nearby furniture. The evaluated standard
+when YOLO loses an interior person track, or finds no people in a short
+clip, and the local VLM proposes a person down. The evaluated standard
 pipeline is unchanged.
 """
 
@@ -26,6 +26,10 @@ GROUND_PROMPT = (
 POSTURE_PROMPT = (
     "Describe the visible people's posture in one factual sentence. "
     "Mention anyone lying down if clearly visible."
+)
+NO_TRACK_PROMPT = (
+    "Describe the visible people and their posture in one factual sentence. "
+    "Mention if anyone is lying on the floor."
 )
 
 
@@ -55,12 +59,75 @@ def _nearby_crops(image, box):
             yield image[top:bottom, left:right]
 
 
+def _propose_no_track_review(frames, resolved_source, camera_id, db_path):
+    """Ask two local image views to agree when YOLO missed every person."""
+    # One check per second, starting halfway through the first second. Keep
+    # the true last frame so a collapse at the clip boundary is still seen.
+    candidate_frames = frames[1::2]
+    if all(frame is not frames[-1] for frame in candidate_frames):
+        candidate_frames.append(frames[-1])
+    for frame in candidate_frames:
+        if frame.image is None:
+            continue
+        image_h, image_w = frame.image.shape[:2]
+        floor_view = frame.image[
+            int(image_h * 0.24):, int(image_w * 0.2):int(image_w * 0.83)
+        ]
+        if floor_view.size == 0:
+            continue
+        whole_answer = caption_image(frame.image, NO_TRACK_PROMPT, max_new_tokens=40)
+        if not _describes_person_down(whole_answer):
+            continue
+        floor_answer = caption_image(floor_view, NO_TRACK_PROMPT, max_new_tokens=40)
+        if not _describes_person_down(floor_answer):
+            continue
+        reason = (
+            "VLM-assisted no-track review candidate: YOLO found no tracked "
+            "people in this short clip. Two local views of the same frame "
+            f"suggest a person down at {frame.video_time_s:.1f}s. This has no "
+            "incident confidence score and does not confirm a fall. "
+            "Review the original video."
+        )
+        detected = DetectedEvent(
+            camera_id=camera_id, category="person_down", confidence=0.0,
+            summary="", frame_index=frame.frame_index,
+            video_time_s=frame.video_time_s,
+            captured_at_utc=frame.captured_at_utc, image=floor_view,
+            track_id=None, rule_reason=reason,
+        )
+        keyframe_path = save_keyframe(detected)
+        event = Event.create(
+            camera_id=camera_id, category="person_down", confidence=0.0,
+            summary=(
+                f"VLM-assisted review candidate at {frame.video_time_s:.1f}s: "
+                "two image views suggest a person may be down, but YOLO "
+                "found no person track. Check the original video; this is "
+                "not a confirmed fall."
+            ),
+            keyframe_path=keyframe_path,
+        )
+        if db_path is None:
+            insert_event(event)
+            insert_event_evidence(
+                event.id, resolved_source, frame.video_time_s,
+                frame.frame_index, None, reason, [],
+            )
+        else:
+            insert_event(event, db_path)
+            insert_event_evidence(
+                event.id, resolved_source, frame.video_time_s,
+                frame.frame_index, None, reason, [], db_path=db_path,
+            )
+        return [event]
+    return []
+
+
 def propose_short_clip_review(
     frames: list[TrackedFrame], source_path: str, camera_id: str,
     db_path=None,
 ) -> list[Event]:
     """Save at most one labeled VLM-assisted review candidate for a short clip."""
-    if not 3 <= len(frames) <= 20 or not Path(source_path).is_file():
+    if not 3 <= len(frames) <= 26 or not Path(source_path).is_file():
         return []
     resolved_source = str(Path(source_path).resolve())
     selected_db = DB_PATH if db_path is None else db_path
@@ -89,6 +156,11 @@ def propose_short_clip_review(
             if width <= 0 or height <= 0:
                 continue
             history[track["track_id"]].append((index, frame, track, image_w, image_h))
+
+    if not history:
+        return _propose_no_track_review(
+            frames, resolved_source, camera_id, db_path,
+        )
 
     candidates = []
     terminal_candidates = []

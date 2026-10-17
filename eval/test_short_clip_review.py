@@ -100,6 +100,22 @@ def main():
             assert evidence["video_time_s"] == 2.0
             assert "later view does not confirm" in evidence["rule_reason"]
 
+        no_tracks = make_frames(track_index=-1)
+        no_tracks[5].image[:] = 255
+        def two_views(crop, prompt, max_new_tokens):
+            return "One person is lying on the floor." if crop.mean() > 100 else "No one is lying down."
+        with (
+            patch("vision.short_clip_review.caption_image", side_effect=two_views),
+            patch("vision.short_clip_review.save_keyframe", return_value=None),
+        ):
+            no_track_event = propose_short_clip_review(no_tracks, str(source), "no-track", db)
+            assert len(no_track_event) == 1 and no_track_event[0].confidence == 0.0
+            no_track_evidence = get_event_evidence(no_track_event[0].id, db)
+            assert no_track_evidence["video_time_s"] == 2.5
+            assert no_track_evidence["track_id"] is None
+            assert propose_short_clip_review(no_tracks, str(source), "no-track", db)[0].id == no_track_event[0].id
+            assert propose_short_clip_review(make_frames(track_index=-1), str(source), "no-track-normal", db) == []
+
     print("PASS: expanded crop, unscored candidate, confidence filter, repeat analysis, and end-frame review")
 
 
