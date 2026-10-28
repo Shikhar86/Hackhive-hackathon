@@ -189,7 +189,6 @@ st.markdown(
     """
     <div class="ui-hero">
       <div class="ui-hero-copy">
-        <div class="ui-eyebrow">HONEYWELL HACKATHON · PROBLEM 3</div>
         <h1>Surveillance <em>Intelligence</em></h1>
         <p>Analyze footage. Review possible incidents. Ask questions about saved events.</p>
       </div>

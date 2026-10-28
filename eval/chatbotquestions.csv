@@ -1,0 +1,21 @@
+
+"Show all tailgating events",tailgating,,,100
+"Show all fighting events",fighting,,,100
+"Show person-down events",person_down,,,100
+"Show crowd incidents",crowd,,,100
+"Show suspicious activity",suspicious,,,100
+"Show events from camera 2",,camera-2,,100
+"Show tailgating events from camera 2",tailgating,camera-2,,100
+"Show fighting events from camera 2",fighting,camera-2,,100
+"Show crowd incidents from camera 2",crowd,camera-2,,100
+"Show suspicious activity from camera 2",suspicious,camera-2,,100
+"Show events above 80% confidence",,,0.8,100
+"Show events above 90% confidence",,,0.9,100
+"Show tailgating events above 80% confidence",tailgating,,0.8,100
+"Show fighting events above 80% confidence",fighting,,0.8,100
+"Show person-down events above 90% confidence",person_down,,0.9,100
+"Show latest 5 events",,,,5
+"Show latest 10 events",,,,10
+"Show last 3 tailgating events",tailgating,,,3
+"Show last 5 fighting events",fighting,,,5
+"Show latest 2 events from camera 2",,camera-2,,2
